@@ -23,22 +23,6 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.ref }}
-
-      - name: Copy files via SCP
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SERVER_IP }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.SERVER_SSH_PORT }}
-          source: "."
-          target: "/home/easytime/EasyTime"
-          rm: false
-
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
         with:
@@ -46,13 +30,35 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SERVER_SSH_PORT }}
+          command_timeout: 30m
           script: |
             set -euo pipefail
-            cd /home/easytime/EasyTime
+
+            REPO_DIR=/home/easytime/EasyTime
+            REPO_URL=https://github.com/EasyTIME-by-SR-BP/EasyTime.git
+            REF="${{ inputs.ref }}"
+            ENV_BACKUP=/tmp/easytime.env.bak
+
+            if [ -f "$REPO_DIR/.env" ]; then
+              cp "$REPO_DIR/.env" "$ENV_BACKUP"
+            fi
+
+            if [ ! -d "$REPO_DIR/.git" ]; then
+              rm -rf "$REPO_DIR"
+              git clone "$REPO_URL" "$REPO_DIR"
+            fi
+
+            cd "$REPO_DIR"
+            git fetch origin "$REF"
+            git checkout FETCH_HEAD
+
+            if [ -f "$ENV_BACKUP" ]; then
+              cp "$ENV_BACKUP" "$REPO_DIR/.env"
+            fi
 
             bash scripts/generate-self-signed-cert.sh
 
-            ENV_FILE=/home/easytime/EasyTime/.env
+            ENV_FILE="$REPO_DIR/.env"
             touch "$ENV_FILE"
 
             OLD_DB=$(grep -E '^DB_PASSWORD=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- | tr -d '\r' || true)
