@@ -28,9 +28,6 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
 
-      - name: Generate self-signed certificate
-        run: bash scripts/generate-self-signed-cert.sh
-
       - name: Copy files via SCP
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -53,6 +50,8 @@ jobs:
             set -euo pipefail
             cd /home/easytime/EasyTime
 
+            bash scripts/generate-self-signed-cert.sh
+
             ENV_FILE=/home/easytime/EasyTime/.env
             touch "$ENV_FILE"
 
@@ -74,20 +73,22 @@ jobs:
             MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
             EOF
 
-            COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
+            run_compose() {
+              sg docker -c "docker compose -f docker-compose.yml -f docker-compose.prod.yml $*"
+            }
             TARGET="${{ inputs.deploy_target }}"
 
             if [ "$TARGET" = "full" ]; then
-              $COMPOSE up -d --build
-              $COMPOSE restart nginx || true
+              run_compose up -d --build
+              run_compose restart nginx || true
             elif [ "$TARGET" = "web" ]; then
-              $COMPOSE up -d --build web
-              $COMPOSE restart nginx || true
+              run_compose up -d --build web
+              run_compose restart nginx || true
             elif [ "$TARGET" = "nginx" ]; then
-              $COMPOSE up -d --build nginx
-              $COMPOSE restart nginx
+              run_compose up -d --build nginx
+              run_compose restart nginx
             elif [ "$TARGET" = "db" ]; then
-              $COMPOSE up -d --build db
+              run_compose up -d --build db
             else
               echo "Unknown deploy target: $TARGET"
               exit 1
