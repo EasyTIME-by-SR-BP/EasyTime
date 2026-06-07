@@ -1,0 +1,98 @@
+name: Deploy to Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_target:
+        description: "Which part should be deployed?"
+        required: true
+        default: "full"
+        type: choice
+        options:
+          - full
+          - web
+          - nginx
+          - db
+      ref:
+        description: "Git branch or tag to deploy"
+        required: true
+        default: "main"
+        type: string
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Generate self-signed certificate
+        run: bash scripts/generate-self-signed-cert.sh
+
+      - name: Copy files via SCP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SERVER_SSH_PORT }}
+          source: "."
+          target: "/home/easytime/EasyTime"
+          rm: false
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SERVER_SSH_PORT }}
+          script: |
+            set -euo pipefail
+            cd /home/easytime/EasyTime
+
+            ENV_FILE=/home/easytime/EasyTime/.env
+            touch "$ENV_FILE"
+
+            OLD_DB=$(grep -E '^DB_PASSWORD=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- | tr -d '\r' || true)
+            OLD_ROOT=$(grep -E '^MYSQL_ROOT_PASSWORD=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- | tr -d '\r' || true)
+            DB_PASSWORD="${OLD_DB:-${{ secrets.DB_PASSWORD }}}"
+            MYSQL_ROOT_PASSWORD="${OLD_ROOT:-${{ secrets.MYSQL_ROOT_PASSWORD }}}"
+
+            cat > "$ENV_FILE" <<EOF
+            APP_PORT=8080
+            HTTP_PORT=80
+            HTTPS_PORT=445
+            DB_DRIVER=mysql
+            DB_HOST=db
+            DB_PORT=3306
+            DB_DATABASE=easytime
+            DB_USERNAME=easytime
+            DB_PASSWORD=${DB_PASSWORD}
+            MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+            EOF
+
+            COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
+            TARGET="${{ inputs.deploy_target }}"
+
+            if [ "$TARGET" = "full" ]; then
+              $COMPOSE up -d --build
+              $COMPOSE restart nginx || true
+            elif [ "$TARGET" = "web" ]; then
+              $COMPOSE up -d --build web
+              $COMPOSE restart nginx || true
+            elif [ "$TARGET" = "nginx" ]; then
+              $COMPOSE up -d --build nginx
+              $COMPOSE restart nginx
+            elif [ "$TARGET" = "db" ]; then
+              $COMPOSE up -d --build db
+            else
+              echo "Unknown deploy target: $TARGET"
+              exit 1
+            fi
+
+      - name: Notify deployment complete
+        run: |
+          echo "Deployed '${{ inputs.deploy_target }}' from ref '${{ inputs.ref }}'"

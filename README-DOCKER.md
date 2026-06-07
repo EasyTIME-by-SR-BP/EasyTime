@@ -36,11 +36,32 @@ docker compose --profile migrate run --rm migrate
 ```bash
 cp .env.example .env
 # Passwörter in .env anpassen
+bash scripts/generate-self-signed-cert.sh
 
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
 
-Datenbank bleibt im Volume `db_data`. Images können in eine Registry gepusht und auf dem Server gezogen werden.
+- **HTTP:** `http://<SERVER-IP>` (Port 80)
+- **HTTPS:** `https://<SERVER-IP>:445` (selbstsigniertes Zertifikat — Browser-Warnung bestätigen)
+
+Datenbank bleibt im Volume `db_data`.
+
+## Deployment (wie Sesamo)
+
+Zuerst `git push`, dann einen Release-Befehl:
+
+```bash
+pnpm release:[branch]:[target]
+```
+
+| Befehl | Ziel |
+|--------|------|
+| `pnpm release:main:full` | Web + DB + Nginx |
+| `pnpm release:main:web` | Nur PHP-App |
+| `pnpm release:main:nginx` | Nur Nginx |
+| `pnpm release:main:db` | Nur MariaDB |
+
+GitHub Secrets: `SERVER_IP`, `SERVER_USER`, `SERVER_SSH_PORT`, `SSH_PRIVATE_KEY`, `DB_PASSWORD`, `MYSQL_ROOT_PASSWORD`
 
 ## Services
 

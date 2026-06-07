@@ -4,3 +4,4 @@ config/db.php
 *.sqlite-journal
 .DS_Store
 .env
+nginx/certs/

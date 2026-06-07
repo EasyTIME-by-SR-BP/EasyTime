@@ -6,7 +6,16 @@
   "scripts": {
     "dev": "php -S localhost:8000 -t public",
     "db:seed": "php scripts/seed-database.php",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "release": "tsx scripts/release.ts",
+    "release:main:full": "pnpm release main:full",
+    "release:main:web": "pnpm release main:web",
+    "release:main:nginx": "pnpm release main:nginx",
+    "release:main:db": "pnpm release main:db"
+  },
+  "devDependencies": {
+    "tsx": "^4.21.0",
+    "@types/node": "^22.0.0"
   },
   "keywords": [
     "php",
