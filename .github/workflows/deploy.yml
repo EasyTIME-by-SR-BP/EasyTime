@@ -28,6 +28,33 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "${{ secrets.SERVER_SSH_PORT }}" "${{ secrets.SERVER_IP }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Rsync to server
+        env:
+          SERVER_IP: ${{ secrets.SERVER_IP }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_SSH_PORT: ${{ secrets.SERVER_SSH_PORT }}
+        run: |
+          rsync -az --delete \
+            --exclude '.git' \
+            --exclude '.env' \
+            --exclude 'node_modules' \
+            --exclude '.cursor' \
+            --exclude 'database/database.sqlite' \
+            -e "ssh -i ~/.ssh/deploy_key -p ${SERVER_SSH_PORT} -o StrictHostKeyChecking=no" \
+            ./ "${SERVER_USER}@${SERVER_IP}:/home/easytime/EasyTime/"
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
         with:
@@ -40,22 +67,13 @@ jobs:
             set -euo pipefail
 
             REPO_DIR=/home/easytime/EasyTime
-            REPO_URL=https://github.com/EasyTIME-by-SR-BP/EasyTime.git
-            REF="${{ inputs.ref }}"
             ENV_BACKUP=/tmp/easytime.env.bak
 
             if [ -f "$REPO_DIR/.env" ]; then
               cp "$REPO_DIR/.env" "$ENV_BACKUP"
             fi
 
-            if [ ! -d "$REPO_DIR/.git" ]; then
-              rm -rf "$REPO_DIR"
-              git clone "$REPO_URL" "$REPO_DIR"
-            fi
-
             cd "$REPO_DIR"
-            git fetch origin "$REF"
-            git checkout FETCH_HEAD
 
             if [ -f "$ENV_BACKUP" ]; then
               cp "$ENV_BACKUP" "$REPO_DIR/.env"
@@ -111,4 +129,4 @@ jobs:
 
       - name: Notify deployment complete
         run: |
-          echo "Deployed '${{ inputs.deploy_target }}' from ref '${{ inputs.ref }}'"
+          echo "Deployed '${{ inputs.deploy_target }}' from ref '${{ inputs.ref }}' via rsync"

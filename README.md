@@ -117,7 +117,7 @@ pnpm release:[branch]:[target]
 
 GitHub Secrets (im Repo hinterlegt): `SERVER_IP`, `SERVER_USER`, `SERVER_SSH_PORT`, `SSH_PRIVATE_KEY`, `DB_PASSWORD`, `MYSQL_ROOT_PASSWORD`
 
-Der Server holt den Code per `git pull` von GitHub — kein manuelles Hochladen nötig.
+GitHub Actions checked den gewählten Branch aus und kopiert den Code per **rsync** auf den Server (kein `git pull` auf dem Server nötig — funktioniert auch mit privatem Repo).
 
 ### Test-Zugänge (Produktion / MariaDB)
 
