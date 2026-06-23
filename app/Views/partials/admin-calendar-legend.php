@@ -10,7 +10,7 @@ $statusItems = [
     ['color' => '#9CA3AF', 'label' => I18n::get('emp.status_cancelled')],
 ];
 ?>
-<div class="mb-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-6 sm:gap-y-3" role="list" aria-label="<?= htmlspecialchars(I18n::get('emp.legend_title')) ?>">
+<div class="mb-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-6 sm:gap-y-3" data-tour="calendar-legend" role="list" aria-label="<?= htmlspecialchars(I18n::get('emp.legend_title')) ?>">
     <div class="flex flex-wrap items-center gap-x-4 gap-y-2.5" role="list">
         <?php foreach ($statusItems as $item): ?>
             <span class="inline-flex items-center gap-2.5 text-sm font-medium text-emerald-800" role="listitem">

@@ -125,7 +125,7 @@ $renderCard = static function (array $req, string $borderClass) use ($statusLabe
     <?php
 };
 ?>
-<div class="space-y-10">
+<div class="space-y-10" data-tour="open-requests">
     <section>
         <div class="mb-6">
             <h2 class="text-xs font-bold uppercase tracking-[0.2em] text-[#E8007D] mb-2"><?= htmlspecialchars($sectionOpen) ?></h2>

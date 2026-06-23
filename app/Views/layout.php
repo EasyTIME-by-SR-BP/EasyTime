@@ -1,5 +1,6 @@
 <?php
 use App\Core\I18n;
+use App\Core\TourConfig;
 require_once __DIR__ . '/partials/tooltip.php';
 require_once __DIR__ . '/partials/nav-icons.php';
 if (!isset($currentRole)) exit;
@@ -892,6 +893,227 @@ if (!isset($currentRole)) exit;
             outline: 2px solid rgba(232, 0, 125, 0.35);
             outline-offset: 2px;
         }
+
+        /* ── Interactive tutorial overlay ── */
+        body.et-tour-active { overflow: hidden; }
+        .et-tour-root {
+            position: fixed;
+            inset: 0;
+            z-index: 160;
+            pointer-events: none;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.25s ease, visibility 0.25s ease;
+        }
+        .et-tour-root--visible {
+            opacity: 1;
+            visibility: visible;
+        }
+        .et-tour-shade {
+            position: fixed;
+            background: rgba(17, 17, 17, 0.72);
+            backdrop-filter: blur(2px);
+            -webkit-backdrop-filter: blur(2px);
+            pointer-events: auto;
+            transition: background 0.25s ease, backdrop-filter 0.25s ease;
+        }
+        .et-tour-root--blur .et-tour-shade {
+            background: rgba(255, 253, 242, 0.12);
+            backdrop-filter: blur(16px) saturate(1.05);
+            -webkit-backdrop-filter: blur(16px) saturate(1.05);
+        }
+        .et-tour-ring {
+            position: fixed;
+            border-radius: 1rem;
+            pointer-events: none;
+            box-shadow:
+                0 0 0 3px rgba(255, 255, 255, 0.95),
+                0 0 0 6px rgba(232, 0, 125, 0.85),
+                0 0 0 10px rgba(232, 0, 125, 0.25),
+                0 0 32px rgba(232, 0, 125, 0.35);
+            animation: et-tour-pulse 2s ease-in-out infinite;
+        }
+        @keyframes et-tour-pulse {
+            0%, 100% { box-shadow: 0 0 0 3px rgba(255,255,255,0.95), 0 0 0 6px rgba(232,0,125,0.85), 0 0 0 10px rgba(232,0,125,0.2), 0 0 24px rgba(232,0,125,0.25); }
+            50% { box-shadow: 0 0 0 3px rgba(255,255,255,1), 0 0 0 7px rgba(232,0,125,1), 0 0 0 14px rgba(232,0,125,0.35), 0 0 40px rgba(232,0,125,0.45); }
+        }
+        [data-tour].et-tour-highlight-target {
+            position: relative;
+            z-index: 165 !important;
+            pointer-events: auto !important;
+        }
+        .et-tour-popover {
+            position: fixed;
+            z-index: 170;
+            width: min(420px, calc(100vw - 2rem));
+            pointer-events: auto;
+        }
+        .et-tour-popover--docked {
+            top: auto !important;
+            left: 50% !important;
+            right: auto !important;
+            transform: translateX(-50%);
+            bottom: max(1.5rem, env(safe-area-inset-bottom, 0px));
+        }
+        @media (max-width: 1023px) {
+            .et-tour-popover--docked {
+                bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
+            }
+        }
+        .et-tour-popover__inner {
+            position: relative;
+            overflow: hidden;
+            border-radius: 1.5rem;
+            border: 2px solid transparent;
+            background:
+                linear-gradient(#ffffff, #ffffff) padding-box,
+                linear-gradient(135deg, #FFD600 0%, #E8007D 55%, #ff73bd 100%) border-box;
+            box-shadow:
+                0 24px 64px rgba(26, 26, 26, 0.28),
+                0 0 0 1px rgba(232, 0, 125, 0.08);
+            padding: 1.25rem 1.35rem 1.15rem;
+        }
+        .et-tour-popover__glow {
+            position: absolute;
+            top: -3rem;
+            right: -2rem;
+            width: 9rem;
+            height: 9rem;
+            border-radius: 9999px;
+            background: radial-gradient(circle, rgba(232, 0, 125, 0.18) 0%, transparent 70%);
+            pointer-events: none;
+        }
+        .et-tour-popover__header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            margin-bottom: 0.65rem;
+        }
+        .et-tour-popover__badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            border-radius: 9999px;
+            background: linear-gradient(135deg, #E8007D, #c8006c);
+            color: #fff8fc;
+            font-size: 0.65rem;
+            font-weight: 800;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            padding: 0.35rem 0.65rem;
+            box-shadow: 0 4px 14px rgba(232, 0, 125, 0.35);
+        }
+        .et-tour-popover__badge::before {
+            content: '';
+            width: 0.45rem;
+            height: 0.45rem;
+            border-radius: 9999px;
+            background: #FFD600;
+            box-shadow: 0 0 8px rgba(255, 214, 0, 0.8);
+        }
+        .et-tour-popover__progress-text {
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: rgba(26, 26, 26, 0.55);
+            white-space: nowrap;
+        }
+        .et-tour-popover__progress {
+            height: 0.35rem;
+            border-radius: 9999px;
+            background: #fff0f7;
+            overflow: hidden;
+            margin-bottom: 1rem;
+        }
+        .et-tour-popover__progress-bar {
+            height: 100%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, #FFD600, #E8007D);
+            transition: width 0.35s ease;
+        }
+        .et-tour-popover__title {
+            font-size: 1.2rem;
+            font-weight: 800;
+            color: #1a1a1a;
+            line-height: 1.25;
+            margin-bottom: 0.55rem;
+        }
+        .et-tour-popover__body {
+            font-size: 0.92rem;
+            line-height: 1.55;
+            color: rgba(26, 26, 26, 0.78);
+            margin-bottom: 0.85rem;
+        }
+        .et-tour-popover__nav-hint {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.82rem;
+            font-weight: 700;
+            color: #E8007D;
+            background: #fff0f7;
+            border: 1px dashed rgba(232, 0, 125, 0.35);
+            border-radius: 0.85rem;
+            padding: 0.55rem 0.75rem;
+            margin-bottom: 0.85rem;
+        }
+        .et-tour-popover__nav-hint::before {
+            content: '→';
+            font-weight: 800;
+        }
+        .et-tour-popover__nav-hint.hidden { display: none; }
+        .et-tour-popover__actions {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+        .et-tour-popover__actions-main {
+            display: flex;
+            gap: 0.5rem;
+            margin-left: auto;
+        }
+        .et-tour-btn {
+            border-radius: 0.85rem;
+            font-size: 0.82rem;
+            font-weight: 800;
+            padding: 0.55rem 0.95rem;
+            transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+        }
+        .et-tour-btn:active { transform: scale(0.98); }
+        .et-tour-btn--ghost {
+            background: transparent;
+            color: rgba(26, 26, 26, 0.55);
+            border: none;
+        }
+        .et-tour-btn--ghost:hover { color: #E8007D; }
+        .et-tour-btn--secondary {
+            background: #fffdf2;
+            color: #1a1a1a;
+            border: 1px solid #fff0a3;
+        }
+        .et-tour-btn--secondary:hover:not(:disabled) {
+            background: #fff7cc;
+        }
+        .et-tour-btn--secondary:disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+        }
+        .et-tour-btn--primary {
+            background: linear-gradient(135deg, #E8007D, #c8006c);
+            color: #fff8fc;
+            border: none;
+            box-shadow: 0 6px 18px rgba(232, 0, 125, 0.35);
+        }
+        .et-tour-btn--primary:hover {
+            box-shadow: 0 8px 22px rgba(232, 0, 125, 0.45);
+        }
+        .et-tour-btn.hidden { display: none; }
+        [data-tour].et-tour-highlight-target {
+            position: relative;
+            z-index: 165 !important;
+        }
     </style>
 </head>
 <body class="min-h-screen max-lg:overflow-hidden lg:overflow-x-hidden relative">
@@ -963,32 +1185,32 @@ if (!isset($currentRole)) exit;
                 <nav class="flex flex-col flex-1 min-h-0 h-full gap-2 max-lg:gap-5" aria-label="Dashboard Navigation">
                     <?php if (in_array($currentRole, ['CEO', 'Admin'], true)): ?>
                         <div class="et-sidebar-nav-group lg:flex-1 lg:min-h-0 lg:overflow-y-auto">
-                            <a href="/?tab=operations" class="<?= $sidebarTabClass ?> <?= $activeTab === 'operations' ? $sidebarTabActive : $sidebarTabIdle ?>" title="<?= I18n::get('ceo.nav_operations') ?>">
+                            <a href="/?tab=operations" data-tour="nav-operations" class="<?= $sidebarTabClass ?> <?= $activeTab === 'operations' ? $sidebarTabActive : $sidebarTabIdle ?>" title="<?= I18n::get('ceo.nav_operations') ?>">
                                 <?= easytime_nav_icon('calendar') ?>
                                 <span class="sidebar-label flex-1"><?= I18n::get('ceo.nav_operations') ?></span>
                             </a>
-                            <a href="/?tab=history" class="<?= $sidebarTabClass ?> <?= $activeTab === 'history' ? $sidebarTabActive : $sidebarTabIdle ?>" title="<?= I18n::get('ceo.nav_history') ?>">
+                            <a href="/?tab=history" data-tour="nav-history" class="<?= $sidebarTabClass ?> <?= $activeTab === 'history' ? $sidebarTabActive : $sidebarTabIdle ?>" title="<?= I18n::get('ceo.nav_history') ?>">
                                 <?= easytime_nav_icon('history') ?>
                                 <span class="sidebar-label flex-1"><?= I18n::get('ceo.nav_history') ?></span>
                             </a>
                         </div>
                         <div class="et-sidebar-nav-group w-full border-t border-lime-200/80 pt-2 shrink-0">
-                            <a href="/?tab=team" class="<?= $sidebarTabClass ?> <?= $activeTab === 'team' ? $sidebarTabActive : $sidebarTabIdle ?>" title="<?= I18n::get('ceo.team') ?>">
+                            <a href="/?tab=team" data-tour="nav-team" class="<?= $sidebarTabClass ?> <?= $activeTab === 'team' ? $sidebarTabActive : $sidebarTabIdle ?>" title="<?= I18n::get('ceo.team') ?>">
                                 <?= easytime_nav_icon('team') ?>
                                 <span class="sidebar-label flex-1"><?= I18n::get('ceo.team') ?></span>
                             </a>
-                            <a href="/?tab=settings" class="<?= $sidebarTabClass ?> <?= $activeTab === 'settings' ? $sidebarTabActive : $sidebarTabIdle ?>" title="<?= I18n::get('ceo.nav_settings') ?>">
+                            <a href="/?tab=settings" data-tour="nav-settings" class="<?= $sidebarTabClass ?> <?= $activeTab === 'settings' ? $sidebarTabActive : $sidebarTabIdle ?>" title="<?= I18n::get('ceo.nav_settings') ?>">
                                 <?= easytime_nav_icon('settings') ?>
                                 <span class="sidebar-label flex-1"><?= I18n::get('ceo.nav_settings') ?></span>
                             </a>
                         </div>
                     <?php else: ?>
                         <div class="et-sidebar-nav-group lg:flex-1 lg:min-h-0 lg:overflow-y-auto">
-                        <a href="/?tab=calendar" class="<?= $sidebarTabClass ?> <?= $activeTab === 'calendar' ? $sidebarTabActive : $sidebarTabIdle ?>" title="<?= I18n::get('emp.calendar') ?>">
+                        <a href="/?tab=calendar" data-tour="nav-calendar" class="<?= $sidebarTabClass ?> <?= $activeTab === 'calendar' ? $sidebarTabActive : $sidebarTabIdle ?>" title="<?= I18n::get('emp.calendar') ?>">
                             <?= easytime_nav_icon('calendar') ?>
                             <span class="sidebar-label flex-1"><?= I18n::get('emp.calendar') ?></span>
                         </a>
-                        <a href="/?tab=history" class="<?= $sidebarTabClass ?> <?= $activeTab === 'history' ? $sidebarTabActive : $sidebarTabIdle ?>" title="<?= I18n::get('history.title') ?>">
+                        <a href="/?tab=history" data-tour="nav-history" class="<?= $sidebarTabClass ?> <?= $activeTab === 'history' ? $sidebarTabActive : $sidebarTabIdle ?>" title="<?= I18n::get('history.title') ?>">
                             <?= easytime_nav_icon('history') ?>
                             <span class="sidebar-label flex-1"><?= I18n::get('history.title') ?></span>
                         </a>
@@ -1003,7 +1225,7 @@ if (!isset($currentRole)) exit;
 
         <?php if ($currentRole === 'Employee' && $activeTab === 'calendar'): ?>
             <div class="space-y-6 sm:space-y-8 min-w-0">
-                <div class="bg-white rounded-3xl border border-lime-100 shadow-xl p-4 sm:p-7 relative overflow-hidden min-w-0">
+                <div class="bg-white rounded-3xl border border-lime-100 shadow-xl p-4 sm:p-7 relative overflow-hidden min-w-0" data-tour="vacation-stats">
                     <div class="pointer-events-none absolute -right-10 -top-10 h-36 w-36 rounded-full bg-lime-100/70 blur-3xl" aria-hidden="true"></div>
                     <h3 class="text-xs font-bold uppercase tracking-[0.2em] text-emerald-500 mb-5 relative"><?= I18n::get('emp.vacation_stats') ?></h3>
                     <div class="grid grid-cols-4 gap-3 sm:gap-8 relative">
@@ -1046,10 +1268,10 @@ if (!isset($currentRole)) exit;
                             <span class="et-checkbox__box" aria-hidden="true"></span>
                             <span><?= I18n::get('emp.show_cancelled') ?></span>
                         </label>
-                        <div id="employee-calendar"></div>
+                        <div id="employee-calendar" data-tour="employee-calendar"></div>
                     </div>
 
-                    <div class="calendar-side-panel">
+                    <div class="calendar-side-panel" data-tour="calendar-side-panel">
                         <div class="bg-white p-6 sm:p-7 rounded-3xl shadow-xl border border-lime-100" x-data="vacationForm()">
                             <section id="employee-calendar-range-section" class="mb-6">
                                 <h3 class="text-xs font-bold uppercase tracking-[0.2em] text-[#E8007D] mb-4"><?= I18n::get('emp.panel_period') ?></h3>
@@ -1131,7 +1353,7 @@ if (!isset($currentRole)) exit;
             <?php include __DIR__ . '/partials/admin-team.php'; ?>
 
         <?php elseif (in_array($currentRole, ['CEO', 'Admin'], true) && $activeTab === 'settings'): ?>
-            <div class="space-y-6 max-w-3xl">
+            <div class="space-y-6 max-w-3xl" data-tour="admin-settings">
                 <div>
                     <h2 class="text-xs font-bold uppercase tracking-[0.2em] text-emerald-500 mb-2"><?= I18n::get('ceo.nav_settings') ?></h2>
                     <p class="text-sm text-emerald-600/80 leading-relaxed"><?= I18n::get('settings.holidays_note') ?></p>
@@ -1164,31 +1386,55 @@ if (!isset($currentRole)) exit;
         <?php include __DIR__ . '/partials/mobile-bottom-nav.php'; ?>
     </div>
 
-    <div id="export-modal" class="fixed inset-0 z-[120] hidden items-center justify-center bg-emerald-950/50 backdrop-blur-sm p-4">
-        <div class="w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-lime-100 p-6">
-            <div class="flex items-center justify-between mb-4">
-                <h3 class="text-xl font-bold text-emerald-900">Kalender Export</h3>
-                <button type="button" onclick="closeExportModal()" class="text-emerald-600 hover:text-emerald-900 font-bold">✕</button>
+    <div id="export-modal" class="fixed inset-0 z-[120] hidden items-center justify-center p-4 sm:p-6" role="dialog" aria-modal="true" aria-labelledby="export-modal-title">
+        <div class="absolute inset-0 bg-emerald-950/40 backdrop-blur-md" onclick="closeExportModal()"></div>
+        <div class="relative w-full max-w-md bg-white rounded-3xl border border-lime-100 shadow-2xl p-6 sm:p-8">
+            <div class="flex items-start justify-between gap-4 mb-6">
+                <div>
+                    <h3 id="export-modal-title" class="text-xl font-bold text-emerald-900"><?= I18n::get('export.title') ?></h3>
+                    <p class="text-sm text-emerald-600/80 mt-1"><?= I18n::get('export.hint') ?></p>
+                </div>
+                <button type="button" onclick="closeExportModal()" class="text-emerald-500 hover:text-emerald-900 font-bold text-xl leading-none" aria-label="<?= htmlspecialchars(I18n::get('ceo.cancel')) ?>">×</button>
             </div>
-            <form action="/" method="GET" class="space-y-4">
+            <form action="/" method="GET" class="space-y-5">
                 <input type="hidden" name="action" value="calendar_ics">
                 <div class="grid grid-cols-2 gap-3">
                     <div>
-                        <label class="block text-xs font-bold text-emerald-700 mb-1">Von</label>
-                        <input type="date" name="export_start" class="w-full bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2 text-emerald-900 outline-none">
+                        <label class="block text-sm font-semibold text-emerald-800 mb-1.5" for="export-start-date"><?= I18n::get('export.from') ?></label>
+                        <input id="export-start-date" type="date" name="export_start" class="w-full bg-[#fffdf2] border border-lime-200 rounded-xl px-4 py-3 text-sm text-emerald-900 outline-none focus:ring-2 focus:ring-lime-400">
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-emerald-700 mb-1">Bis</label>
-                        <input type="date" name="export_end" class="w-full bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2 text-emerald-900 outline-none">
+                        <label class="block text-sm font-semibold text-emerald-800 mb-1.5" for="export-end-date"><?= I18n::get('export.to') ?></label>
+                        <input id="export-end-date" type="date" name="export_end" class="w-full bg-[#fffdf2] border border-lime-200 rounded-xl px-4 py-3 text-sm text-emerald-900 outline-none focus:ring-2 focus:ring-lime-400">
                     </div>
                 </div>
-                <div class="grid grid-cols-1 gap-1 text-sm text-emerald-800">
-                    <label><input type="checkbox" name="include_approved" value="1" checked class="mr-2">Genehmigt</label>
-                    <label><input type="checkbox" name="include_pending" value="1" checked class="mr-2">Ausstehend</label>
-                    <label><input type="checkbox" name="include_storno" value="1" checked class="mr-2">Storno angefragt</label>
-                    <label id="export-include-blocked-row" class="hidden"><input type="checkbox" name="include_blocked" value="1" class="mr-2">Sperrzeiten</label>
+                <div class="rounded-2xl border border-lime-100 bg-[#fffdf2]/60 p-4 space-y-3">
+                    <div class="text-xs font-bold uppercase tracking-[0.2em] text-emerald-500"><?= I18n::get('export.filters') ?></div>
+                    <label class="et-checkbox" for="export-include-approved">
+                        <input id="export-include-approved" type="checkbox" name="include_approved" value="1" checked class="et-checkbox__input">
+                        <span class="et-checkbox__box" aria-hidden="true"></span>
+                        <span><?= I18n::get('emp.status_approved') ?></span>
+                    </label>
+                    <label class="et-checkbox" for="export-include-pending">
+                        <input id="export-include-pending" type="checkbox" name="include_pending" value="1" checked class="et-checkbox__input">
+                        <span class="et-checkbox__box" aria-hidden="true"></span>
+                        <span><?= I18n::get('emp.status_pending') ?></span>
+                    </label>
+                    <label class="et-checkbox" for="export-include-storno">
+                        <input id="export-include-storno" type="checkbox" name="include_storno" value="1" checked class="et-checkbox__input">
+                        <span class="et-checkbox__box" aria-hidden="true"></span>
+                        <span><?= I18n::get('emp.status_storno_requested') ?></span>
+                    </label>
+                    <label id="export-include-blocked-row" class="et-checkbox hidden" for="export-include-blocked">
+                        <input id="export-include-blocked" type="checkbox" name="include_blocked" value="1" class="et-checkbox__input">
+                        <span class="et-checkbox__box" aria-hidden="true"></span>
+                        <span><?= I18n::get('export.include_blocked') ?></span>
+                    </label>
                 </div>
-                <button type="submit" class="w-full et-btn-primary font-bold py-2.5 rounded-xl">Exportieren</button>
+                <div class="flex flex-wrap justify-end gap-3 pt-1">
+                    <button type="button" onclick="closeExportModal()" class="et-btn-secondary px-5 py-3 rounded-xl text-sm font-bold"><?= I18n::get('ceo.cancel') ?></button>
+                    <button type="submit" class="et-btn-primary px-5 py-3 rounded-xl text-sm font-bold shadow-lg shadow-lime-400/20"><?= I18n::get('export.submit') ?></button>
+                </div>
             </form>
         </div>
     </div>
@@ -3512,6 +3758,8 @@ if (!isset($currentRole)) exit;
             });
         }
 
+        let exportModalEscapeHandler = null;
+
         function openExportModal(isAdminExport) {
             const modal = document.getElementById('export-modal');
             const blockedRow = document.getElementById('export-include-blocked-row');
@@ -3519,6 +3767,10 @@ if (!isset($currentRole)) exit;
             blockedRow.classList.toggle('hidden', !isAdminExport);
             modal.classList.remove('hidden');
             modal.classList.add('flex');
+            exportModalEscapeHandler = function(e) {
+                if (e.key === 'Escape') closeExportModal();
+            };
+            document.addEventListener('keydown', exportModalEscapeHandler);
         }
 
         function closeExportModal() {
@@ -3526,6 +3778,10 @@ if (!isset($currentRole)) exit;
             if (!modal) return;
             modal.classList.add('hidden');
             modal.classList.remove('flex');
+            if (exportModalEscapeHandler) {
+                document.removeEventListener('keydown', exportModalEscapeHandler);
+                exportModalEscapeHandler = null;
+            }
         }
 
         function openAdminPastConfirmModal(form) {
@@ -3615,6 +3871,32 @@ if (!isset($currentRole)) exit;
             }
         }
 
+    </script>
+    <?php
+        $tourId = in_array($currentRole, ['CEO', 'Admin'], true) ? 'admin' : 'employee';
+        $tourUserId = (int) ($currentUser['id'] ?? 0);
+        $tourSteps = TourConfig::stepsForRole($currentRole);
+        $tourLabels = TourConfig::uiLabels($currentRole);
+        $tourAutoStart = empty($requirePasswordChange) && $tourUserId > 0;
+    ?>
+    <script src="/assets/js/easytime-tour.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            window.EasyTimeTour.init({
+                tourId: <?= json_encode($tourId, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>,
+                userId: <?= (int) $tourUserId ?>,
+                activeTab: <?= json_encode($activeTab, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>,
+                steps: <?= json_encode($tourSteps, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>,
+                labels: <?= json_encode($tourLabels, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>,
+                autoStart: <?= $tourAutoStart ? 'true' : 'false' ?>,
+            });
+
+            document.getElementById('et-tour-start-btn')?.addEventListener('click', function (e) {
+                if (window.EasyTimeTour.isActive()) return;
+                e.preventDefault();
+                window.EasyTimeTour.start();
+            });
+        });
     </script>
     <?php include __DIR__ . '/partials/toast.php'; ?>
 </body>

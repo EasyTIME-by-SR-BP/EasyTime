@@ -33,7 +33,7 @@ $filterLabels = [
 $currentFilterLabel = $filterLabels[$inboxFilter] ?? $filterLabels['all'];
 $currentFilterCount = (int) ($inboxCounts[$inboxFilter] ?? count($notificationList ?? []));
 ?>
-<div class="w-full max-w-none">
+<div class="w-full max-w-none" data-tour="inbox-content">
     <?php
         $isAdmin = in_array($currentRole ?? '', ['CEO', 'Admin'], true);
         include __DIR__ . '/mobile-inbox-filters.php';

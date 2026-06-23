@@ -40,8 +40,22 @@ $currentLang = $_SESSION['lang'] ?? 'de';
             <a href="?lang=de" class="<?= $currentLang === 'de' ? 'font-bold text-lime-600' : 'text-emerald-600 hover:text-emerald-900' ?>">DE</a>
         </div>
 
+        <button
+            type="button"
+            id="et-tour-start-btn"
+            data-tour="help-button"
+            class="<?= $topbarControlClass ?> inline-flex h-10 w-10 items-center justify-center text-emerald-600 hover:border-[#E8007D]/40 hover:bg-[#fff0f7] hover:text-[#E8007D]"
+            title="<?= htmlspecialchars(I18n::get('tour.start')) ?>"
+            aria-label="<?= htmlspecialchars(I18n::get('tour.start')) ?>"
+        >
+            <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+        </button>
+
         <a
             href="/?tab=inbox"
+            data-tour="nav-inbox"
             class="et-topbar-inbox-btn hidden lg:inline-flex<?= $inboxBtnActive ? ' is-active' : '' ?>"
             aria-label="<?= htmlspecialchars($inboxAriaLabel) ?>"
             aria-current="<?= $inboxBtnActive ? 'page' : 'false' ?>"

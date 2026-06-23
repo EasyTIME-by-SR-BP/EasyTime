@@ -24,6 +24,7 @@ $renderInboxNav = static function (bool $isActive) use ($navItemClass, $unreadCo
     ?>
     <a
         href="/?tab=inbox"
+        data-tour="nav-inbox"
         class="<?= $navItemClass($isActive) ?> relative"
         aria-current="<?= $isActive ? 'page' : 'false' ?>"
         aria-label="<?= htmlspecialchars($inboxAriaLabel) ?>"
@@ -46,29 +47,29 @@ $renderInboxNav = static function (bool $isActive) use ($navItemClass, $unreadCo
 <nav class="et-mobile-nav lg:hidden shrink-0 w-full max-w-full border-t border-lime-200/80 bg-white/95 backdrop-blur-lg shadow-[0_-4px_24px_rgba(26,26,26,0.08)]" aria-label="<?= htmlspecialchars(I18n::get('nav.mobile_main')) ?>">
     <div class="flex w-full max-w-full items-stretch gap-0 px-1 pt-1 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
         <?php if ($isAdmin): ?>
-            <a href="/?tab=operations" class="<?= $navItemClass($activeTab === 'operations') ?>" aria-current="<?= $activeTab === 'operations' ? 'page' : 'false' ?>">
+            <a href="/?tab=operations" data-tour="nav-operations" class="<?= $navItemClass($activeTab === 'operations') ?>" aria-current="<?= $activeTab === 'operations' ? 'page' : 'false' ?>">
                 <?= easytime_nav_icon('calendar') ?>
                 <span class="truncate text-[10px] font-bold leading-tight"><?= I18n::get('nav.mobile_ops') ?></span>
             </a>
-            <a href="/?tab=history" class="<?= $navItemClass($activeTab === 'history') ?>" aria-current="<?= $activeTab === 'history' ? 'page' : 'false' ?>">
+            <a href="/?tab=history" data-tour="nav-history" class="<?= $navItemClass($activeTab === 'history') ?>" aria-current="<?= $activeTab === 'history' ? 'page' : 'false' ?>">
                 <?= easytime_nav_icon('history') ?>
                 <span class="truncate text-[10px] font-bold leading-tight"><?= I18n::get('ceo.nav_history') ?></span>
             </a>
             <?php $renderInboxNav($activeTab === 'inbox'); ?>
-            <a href="/?tab=team" class="<?= $navItemClass($activeTab === 'team') ?>" aria-current="<?= $activeTab === 'team' ? 'page' : 'false' ?>">
+            <a href="/?tab=team" data-tour="nav-team" class="<?= $navItemClass($activeTab === 'team') ?>" aria-current="<?= $activeTab === 'team' ? 'page' : 'false' ?>">
                 <?= easytime_nav_icon('team') ?>
                 <span class="truncate text-[10px] font-bold leading-tight"><?= I18n::get('nav.mobile_team') ?></span>
             </a>
-            <a href="/?tab=settings" class="<?= $navItemClass($activeTab === 'settings') ?>" aria-current="<?= $activeTab === 'settings' ? 'page' : 'false' ?>">
+            <a href="/?tab=settings" data-tour="nav-settings" class="<?= $navItemClass($activeTab === 'settings') ?>" aria-current="<?= $activeTab === 'settings' ? 'page' : 'false' ?>">
                 <?= easytime_nav_icon('settings') ?>
                 <span class="truncate text-[10px] font-bold leading-tight"><?= I18n::get('nav.mobile_settings') ?></span>
             </a>
         <?php else: ?>
-            <a href="/?tab=calendar" class="<?= $navItemClass($activeTab === 'calendar') ?>" aria-current="<?= $activeTab === 'calendar' ? 'page' : 'false' ?>">
+            <a href="/?tab=calendar" data-tour="nav-calendar" class="<?= $navItemClass($activeTab === 'calendar') ?>" aria-current="<?= $activeTab === 'calendar' ? 'page' : 'false' ?>">
                 <?= easytime_nav_icon('calendar') ?>
                 <span class="truncate text-[10px] font-bold leading-tight"><?= I18n::get('emp.calendar') ?></span>
             </a>
-            <a href="/?tab=history" class="<?= $navItemClass($activeTab === 'history') ?>" aria-current="<?= $activeTab === 'history' ? 'page' : 'false' ?>">
+            <a href="/?tab=history" data-tour="nav-history" class="<?= $navItemClass($activeTab === 'history') ?>" aria-current="<?= $activeTab === 'history' ? 'page' : 'false' ?>">
                 <?= easytime_nav_icon('history') ?>
                 <span class="truncate text-[10px] font-bold leading-tight"><?= I18n::get('history.title') ?></span>
             </a>

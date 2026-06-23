@@ -119,7 +119,7 @@ $labelClass = 'block text-sm font-semibold text-emerald-800 mb-1.5';
             </button>
         </div>
 
-        <div class="bg-white rounded-3xl border border-lime-100 shadow-xl p-6 sm:p-7" x-data="{ teamSearch: '' }">
+        <div class="bg-white rounded-3xl border border-lime-100 shadow-xl p-6 sm:p-7" data-tour="admin-team" x-data="{ teamSearch: '' }">
             <div class="flex flex-col sm:flex-row sm:items-end gap-3 mb-4">
                 <div class="flex-1 min-w-0">
                     <label class="block text-[11px] font-bold uppercase tracking-[0.15em] text-emerald-500 mb-1.5" for="team-search"><?= I18n::get('ceo.search_users') ?></label>

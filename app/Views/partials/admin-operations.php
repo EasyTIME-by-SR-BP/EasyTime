@@ -190,11 +190,11 @@ $renderChangeCard = static function (array $req) use ($requestCommentsById, $lab
                     <span class="et-checkbox__box" aria-hidden="true"></span>
                     <span><?= I18n::get('ceo.show_cancelled') ?></span>
                 </label>
-                <div id="ceo-calendar"></div>
+                <div id="ceo-calendar" data-tour="ceo-calendar"></div>
             </div>
         </div>
 
-        <div class="calendar-side-panel min-w-0">
+        <div class="calendar-side-panel min-w-0" data-tour="admin-side-panel">
             <div class="bg-white p-4 sm:p-7 rounded-3xl shadow-xl border border-lime-100 overflow-hidden min-w-0">
                 <section id="admin-calendar-range-section" class="mb-6">
                     <h3 class="text-xs font-bold uppercase tracking-[0.2em] text-[#E8007D] mb-4"><?= I18n::get('emp.panel_period') ?></h3>
@@ -303,7 +303,7 @@ $renderChangeCard = static function (array $req) use ($requestCommentsById, $lab
         </div>
     </div>
 
-    <section id="ceo-section-change" class="w-full scroll-mt-24">
+    <section id="ceo-section-change" class="w-full scroll-mt-24" data-tour="ceo-section-change">
         <h2 class="text-xs font-bold uppercase tracking-[0.2em] text-violet-600 mb-2"><?= I18n::get('ceo.section_change_requests') ?></h2>
         <p class="text-sm text-emerald-600/80 mb-4"><?= I18n::get('ceo.section_change_requests_hint') ?></p>
         <?php if ($pendingChanges === []): ?>
@@ -320,7 +320,7 @@ $renderChangeCard = static function (array $req) use ($requestCommentsById, $lab
         <?php endif; ?>
     </section>
 
-    <section id="ceo-section-vacation" class="w-full scroll-mt-24">
+    <section id="ceo-section-vacation" class="w-full scroll-mt-24" data-tour="ceo-section-vacation">
         <h2 class="text-xs font-bold uppercase tracking-[0.2em] text-[#E8007D] mb-2"><?= I18n::get('ceo.section_vacation_requests') ?></h2>
         <p class="text-sm text-emerald-600/80 mb-4"><?= I18n::get('ceo.section_vacation_requests_hint') ?></p>
         <?php if ($pendingVacations === []): ?>
@@ -337,7 +337,7 @@ $renderChangeCard = static function (array $req) use ($requestCommentsById, $lab
         <?php endif; ?>
     </section>
 
-    <section id="ceo-section-storno" class="w-full scroll-mt-24">
+    <section id="ceo-section-storno" class="w-full scroll-mt-24" data-tour="ceo-section-storno">
         <h2 class="text-xs font-bold uppercase tracking-[0.2em] text-orange-500 mb-2"><?= I18n::get('ceo.section_storno_requests') ?></h2>
         <p class="text-sm text-emerald-600/80 mb-4"><?= I18n::get('ceo.section_storno_requests_hint') ?></p>
         <?php if ($pendingStorno === []): ?>

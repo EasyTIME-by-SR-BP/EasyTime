@@ -97,7 +97,7 @@ $sectionPast = I18n::get('history.section.past');
             <p class="text-sm text-emerald-600/80 leading-relaxed"><?= I18n::get('history.subtitle_admin') ?></p>
         </div>
 
-        <div class="w-full bg-white rounded-3xl border border-lime-100 shadow-xl p-6 sm:p-7" x-show="selectedId === null">
+        <div class="w-full bg-white rounded-3xl border border-lime-100 shadow-xl p-6 sm:p-7" data-tour="history-list" x-show="selectedId === null">
             <div class="flex flex-col sm:flex-row gap-3 mb-6">
                 <input
                     type="search"

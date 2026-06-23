@@ -19,7 +19,7 @@ if ($filterEmployees === []) {
     return;
 }
 ?>
-<div id="ceo-employee-filter-anchor" class="w-full min-w-0 max-w-full">
+<div id="ceo-employee-filter-anchor" class="w-full min-w-0 max-w-full" data-tour="ceo-employee-filter">
 <div id="ceo-employee-filter" class="relative w-full min-w-0 max-w-full bg-white rounded-3xl shadow-xl border border-lime-100 px-4 sm:px-7 py-3">
     <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
         <span class="text-xs font-bold uppercase tracking-[0.2em] text-emerald-500 shrink-0"><?= I18n::get('ceo.employee_filter') ?></span>
