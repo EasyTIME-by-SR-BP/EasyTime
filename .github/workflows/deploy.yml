@@ -33,30 +33,27 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
 
-      - name: Setup SSH key
+      - name: Create deploy archive
         run: |
-          mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -p "${{ secrets.SERVER_SSH_PORT }}" "${{ secrets.SERVER_IP }}" >> ~/.ssh/known_hosts 2>/dev/null || true
-
-      - name: Sync files to server
-        env:
-          SERVER_IP: ${{ secrets.SERVER_IP }}
-          SERVER_USER: ${{ secrets.SERVER_USER }}
-          SERVER_SSH_PORT: ${{ secrets.SERVER_SSH_PORT }}
-        run: |
-          SSH_OPTS="-i ~/.ssh/deploy_key -p ${SERVER_SSH_PORT} -o StrictHostKeyChecking=no -o ServerAliveInterval=15"
-          tar czf - \
+          tar czf deploy.tar.gz \
             --exclude='./.git' \
             --exclude='./.env' \
             --exclude='./node_modules' \
             --exclude='./.cursor' \
             --exclude='./database/database.sqlite' \
             --exclude='./ahaappup (1).sql' \
-            . \
-          | timeout 10m ssh ${SSH_OPTS} "${SERVER_USER}@${SERVER_IP}" \
-              'mkdir -p /home/easytime/EasyTime && tar xzf - -C /home/easytime/EasyTime'
+            .
+          ls -lh deploy.tar.gz
+
+      - name: Upload archive to server
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SERVER_SSH_PORT }}
+          source: deploy.tar.gz
+          target: /tmp/easytime-deploy
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
@@ -71,17 +68,21 @@ jobs:
 
             REPO_DIR=/home/easytime/EasyTime
             ENV_BACKUP=/tmp/easytime.env.bak
+            ARCHIVE=/tmp/easytime-deploy/deploy.tar.gz
 
             if [ -f "$REPO_DIR/.env" ]; then
               cp "$REPO_DIR/.env" "$ENV_BACKUP"
             fi
 
-            cd "$REPO_DIR"
+            mkdir -p "$REPO_DIR"
+            tar xzf "$ARCHIVE" -C "$REPO_DIR"
+            rm -f "$ARCHIVE"
 
             if [ -f "$ENV_BACKUP" ]; then
               cp "$ENV_BACKUP" "$REPO_DIR/.env"
             fi
 
+            cd "$REPO_DIR"
             bash scripts/generate-self-signed-cert.sh
 
             ENV_FILE="$REPO_DIR/.env"
@@ -132,4 +133,4 @@ jobs:
 
       - name: Notify deployment complete
         run: |
-          echo "Deployed '${{ inputs.deploy_target }}' from ref '${{ inputs.ref }}' via tar+ssh"
+          echo "Deployed '${{ inputs.deploy_target }}' from ref '${{ inputs.ref }}' via scp"
