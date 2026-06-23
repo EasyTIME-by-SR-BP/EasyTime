@@ -4,7 +4,7 @@ use App\Core\I18n;
 /** @var list<array<string, mixed>> $employees */
 /** @var list<array<string, mixed>> $departments */
 /** @var array<string, mixed>|null $selectedTeamUser */
-/** @var int $selectedTeamUserUsedDays */
+/** @var array<string, int> $selectedTeamUserStats */
 /** @var list<array<string, mixed>> $selectedTeamUserRequests */
 /** @var array<int, list<array<string, mixed>>> $requestCommentsById */
 /** @var array<string, mixed> $currentUser */
@@ -33,11 +33,11 @@ $labelClass = 'block text-sm font-semibold text-emerald-800 mb-1.5';
                 </div>
                 <div class="rounded-2xl border border-lime-100 bg-[#fffdf2]/50 p-4">
                     <div class="text-xs font-bold uppercase tracking-[0.15em] text-emerald-500 mb-1"><?= I18n::get('ceo.vacation_used') ?></div>
-                    <div class="text-3xl font-bold text-emerald-900 tabular-nums"><?= (int) $selectedTeamUserUsedDays ?></div>
+                    <div class="text-3xl font-bold text-emerald-900 tabular-nums"><?= (int) ($selectedTeamUserStats['approved'] ?? $selectedTeamUserUsedDays) ?></div>
                 </div>
                 <div class="rounded-2xl border border-[#E8007D]/20 bg-[#fff8fc]/40 p-4">
                     <div class="text-xs font-bold uppercase tracking-[0.15em] text-[#E8007D] mb-1"><?= I18n::get('ceo.vacation_remaining') ?></div>
-                    <div class="text-3xl font-bold text-emerald-900 tabular-nums"><?= max(0, (int) $selectedTeamUser['vacation_entitlement_days'] - (int) $selectedTeamUserUsedDays) ?></div>
+                    <div class="text-3xl font-bold text-emerald-900 tabular-nums"><?= (int) ($selectedTeamUserStats['remaining'] ?? 0) ?></div>
                 </div>
             </div>
 

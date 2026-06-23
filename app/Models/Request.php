@@ -28,6 +28,23 @@ class Request {
         };
     }
 
+    private static function canTransitionStatus(string $from, string $to): bool {
+        if ($from === $to) {
+            return false;
+        }
+
+        return match ($to) {
+            'approved'  => in_array($from, ['pending', 'storno_requested', 'rejected', 'cancelled'], true),
+            'rejected'  => $from === 'pending',
+            'cancelled' => in_array($from, ['storno_requested', 'approved'], true),
+            default     => false,
+        };
+    }
+
+    private static function statusCountsAgainstBalance(string $status): bool {
+        return in_array($status, ['pending', 'approved', 'storno_requested', 'change_requested'], true);
+    }
+
     private static function mapVacationRow(array $row): array {
         $start  = (string) ($row['beginn'] ?? '');
         $end    = (string) ($row['ende'] ?? '');
@@ -81,7 +98,11 @@ class Request {
         return array_map([self::class, 'mapVacationRow'], $rows);
     }
 
-    public static function create($userId, $startDate, $endDate, $netDays, $type = 'vacation', $deductedHours = 0) {
+    public static function create($userId, $startDate, $endDate, $type = 'vacation', $deductedHours = 0) {
+        $netDays = self::calculateNetDays((string) $startDate, (string) $endDate);
+        if ($netDays <= 0) {
+            return false;
+        }
         if (self::hasBlockedOverlap($startDate, $endDate)) {
             return false;
         }
@@ -90,7 +111,7 @@ class Request {
         }
 
         $stats = self::calculateUserVacationStats($userId);
-        if ((int) $netDays > (int) ($stats['remaining'] ?? 0)) {
+        if ($netDays > (int) ($stats['remaining'] ?? 0)) {
             return 'insufficient_balance';
         }
 
@@ -105,25 +126,35 @@ class Request {
             INSERT INTO urlaub (mitarbeiter_id, beginn, ende, tage_im_urlaub, beginn_in_worten, ende_in_worten, vertretung_id, buero, buero_vertretung_id, genehmigt)
             VALUES (?, ?, ?, ?, NULL, NULL, NULL, 0, NULL, 0)
         ");
-        if (!$stmt->execute([(int) $userId, $startDate, $endDate, (int) $netDays])) {
+        if (!$stmt->execute([(int) $userId, $startDate, $endDate, $netDays])) {
             return false;
         }
         return (int) $db->lastInsertId();
     }
 
-    public static function createAdminVacation($userId, $approverId, $startDate, $endDate, $netDays, $comment = null) {
+    public static function createAdminVacation($userId, $approverId, $startDate, $endDate, $netDays = null, $comment = null) {
+        $netDays = self::calculateNetDays((string) $startDate, (string) $endDate);
+        if ($netDays <= 0) {
+            return false;
+        }
         if (self::hasBlockedOverlap($startDate, $endDate)) {
             return false;
         }
         if (self::hasUserVacationOverlap($userId, $startDate, $endDate)) {
             return false;
         }
+
+        $stats = self::calculateUserVacationStats((int) $userId);
+        if ($netDays > (int) ($stats['remaining'] ?? 0)) {
+            return 'insufficient_balance';
+        }
+
         $db   = Database::getConnection();
         $stmt = $db->prepare("
             INSERT INTO urlaub (mitarbeiter_id, beginn, ende, tage_im_urlaub, beginn_in_worten, ende_in_worten, vertretung_id, buero, buero_vertretung_id, genehmigt)
             VALUES (?, ?, ?, ?, NULL, NULL, NULL, 0, NULL, 1)
         ");
-        if (!$stmt->execute([(int) $userId, $startDate, $endDate, (int) $netDays])) {
+        if (!$stmt->execute([(int) $userId, $startDate, $endDate, $netDays])) {
             return false;
         }
         return (int) $db->lastInsertId();
@@ -142,7 +173,18 @@ class Request {
             return false;
         }
 
-        if ((string) $status === 'approved') {
+        $status = (string) $status;
+        $currentStatus = (string) ($req['status'] ?? 'pending');
+
+        if (!in_array($status, ['approved', 'rejected', 'cancelled'], true)) {
+            return false;
+        }
+
+        if (!self::canTransitionStatus($currentStatus, $status)) {
+            return false;
+        }
+
+        if ($status === 'approved') {
             $start = ($startDate && $endDate) ? $startDate : (string) $req['start_date'];
             $end = ($startDate && $endDate) ? $endDate : (string) $req['end_date'];
             $netDays = self::calculateNetDays($start, $end);
@@ -157,29 +199,37 @@ class Request {
                 if (self::hasUserVacationOverlap((int) $req['user_id'], $start, $end, (int) $requestId)) {
                     return false;
                 }
-                $oldDays = (int) ($req['net_days'] ?? 0);
-                if ($netDays > $oldDays) {
-                    $stats = self::calculateUserVacationStats((int) $req['user_id']);
-                    if (($netDays - $oldDays) > (int) ($stats['remaining'] ?? 0)) {
-                        return 'insufficient_balance';
-                    }
+            }
+
+            $oldDays = (int) ($req['net_days'] ?? 0);
+            if (!self::statusCountsAgainstBalance($currentStatus)) {
+                $stats = self::calculateUserVacationStats((int) $req['user_id']);
+                if ($netDays > (int) ($stats['remaining'] ?? 0)) {
+                    return 'insufficient_balance';
                 }
+            } elseif ($netDays > $oldDays) {
+                $stats = self::calculateUserVacationStats((int) $req['user_id']);
+                if (($netDays - $oldDays) > (int) ($stats['remaining'] ?? 0)) {
+                    return 'insufficient_balance';
+                }
+            }
+
+            if (!self::passesMinimumCoverage((int) $req['user_id'], $start, $end, (int) $requestId)) {
+                return false;
+            }
+
+            if ($start !== $req['start_date'] || $end !== $req['end_date'] || $netDays !== $oldDays) {
                 $db = Database::getConnection();
                 $upd = $db->prepare('UPDATE urlaub SET beginn = ?, ende = ?, tage_im_urlaub = ? WHERE id = ?');
                 if (!$upd->execute([$start, $end, $netDays, (int) $requestId])) {
                     return false;
                 }
-                $req = self::getById($requestId);
-            }
-
-            if ($req && !self::passesMinimumCoverage($req['user_id'], $req['start_date'], $req['end_date'], (int) $requestId)) {
-                return false;
             }
         }
 
         $db   = Database::getConnection();
         $stmt = $db->prepare('UPDATE urlaub SET genehmigt = ? WHERE id = ?');
-        return $stmt->execute([self::statusToFlag((string) $status), (int) $requestId]);
+        return $stmt->execute([self::statusToFlag($status), (int) $requestId]);
     }
 
     public static function getById($requestId) {
@@ -202,19 +252,22 @@ class Request {
     public static function withdrawRequest($id, $userId) {
         $db   = Database::getConnection();
         $stmt = $db->prepare("DELETE FROM urlaub WHERE id = ? AND mitarbeiter_id = ? AND COALESCE(genehmigt, 0) = 0");
-        return $stmt->execute([(int) $id, (int) $userId]);
+        $stmt->execute([(int) $id, (int) $userId]);
+        return $stmt->rowCount() > 0;
     }
 
     public static function requestStorno($id, $userId) {
         $db   = Database::getConnection();
         $stmt = $db->prepare("UPDATE urlaub SET genehmigt = 3 WHERE id = ? AND mitarbeiter_id = ? AND COALESCE(genehmigt, 0) = 1");
-        return $stmt->execute([(int) $id, (int) $userId]);
+        $stmt->execute([(int) $id, (int) $userId]);
+        return $stmt->rowCount() > 0;
     }
 
     public static function withdrawStornoRequest($id, $userId) {
         $db   = Database::getConnection();
         $stmt = $db->prepare("UPDATE urlaub SET genehmigt = 1 WHERE id = ? AND mitarbeiter_id = ? AND COALESCE(genehmigt, 0) = 3");
-        return $stmt->execute([(int) $id, (int) $userId]);
+        $stmt->execute([(int) $id, (int) $userId]);
+        return $stmt->rowCount() > 0;
     }
 
     public static function requestChange($id, $userId, $newStart, $newEnd, $netDays) {
@@ -233,7 +286,10 @@ class Request {
         }
 
         $oldDays = (int) ($req['net_days'] ?? 0);
-        $newDays = (int) $netDays;
+        $newDays = self::calculateNetDays((string) $newStart, (string) $newEnd);
+        if ($newDays <= 0) {
+            return false;
+        }
         if ($newDays > $oldDays) {
             $stats = self::calculateUserVacationStats((int) $userId);
             if (($newDays - $oldDays) > (int) ($stats['remaining'] ?? 0)) {
@@ -252,7 +308,8 @@ class Request {
             SET genehmigt = 5, wunsch_beginn = ?, wunsch_ende = ?, wunsch_tage = ?
             WHERE id = ? AND mitarbeiter_id = ? AND COALESCE(genehmigt, 0) = 1
         ");
-        return $stmt->execute([(string) $newStart, (string) $newEnd, $newDays, (int) $id, (int) $userId]) ? true : false;
+        $stmt->execute([(string) $newStart, (string) $newEnd, $newDays, (int) $id, (int) $userId]);
+        return $stmt->rowCount() > 0;
     }
 
     public static function withdrawChangeRequest($id, $userId) {
@@ -262,7 +319,8 @@ class Request {
             SET genehmigt = 1, wunsch_beginn = NULL, wunsch_ende = NULL, wunsch_tage = NULL
             WHERE id = ? AND mitarbeiter_id = ? AND COALESCE(genehmigt, 0) = 5
         ");
-        return $stmt->execute([(int) $id, (int) $userId]);
+        $stmt->execute([(int) $id, (int) $userId]);
+        return $stmt->rowCount() > 0;
     }
 
     public static function decideChange($requestId, $approve, $startDate = null, $endDate = null) {
@@ -438,7 +496,17 @@ class Request {
         $approvedStmt->execute([(int) $userId]);
         $approvedDays = (int) $approvedStmt->fetchColumn();
 
-        $plannedStmt = $db->prepare("SELECT COALESCE(SUM(tage_im_urlaub), 0) FROM urlaub WHERE mitarbeiter_id = ? AND COALESCE(genehmigt, 0) IN (0, 3, 5)");
+        $plannedStmt = $db->prepare("
+            SELECT COALESCE(SUM(
+                CASE
+                    WHEN COALESCE(genehmigt, 0) = 5 AND wunsch_tage IS NOT NULL AND wunsch_tage > 0
+                        THEN wunsch_tage
+                    ELSE tage_im_urlaub
+                END
+            ), 0)
+            FROM urlaub
+            WHERE mitarbeiter_id = ? AND COALESCE(genehmigt, 0) IN (0, 3, 5)
+        ");
         $plannedStmt->execute([(int) $userId]);
         $plannedDays = (int) $plannedStmt->fetchColumn();
 

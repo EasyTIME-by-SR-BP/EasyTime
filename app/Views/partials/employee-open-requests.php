@@ -77,6 +77,7 @@ $renderCard = static function (array $req, string $borderClass) use ($statusLabe
             <?php if ($isPlanned): ?>
                 <form method="POST" action="/?action=request_storno" class="inline">
                     <input type="hidden" name="request_id" value="<?= $rid ?>">
+                    <input type="hidden" name="return_tab" value="calendar">
                     <button type="submit" class="w-full text-orange-600 hover:text-white hover:bg-orange-500 border border-orange-200 px-3 py-2 rounded-xl text-xs font-bold transition-colors">
                         <?= I18n::get('emp.storno') ?>
                     </button>
@@ -92,6 +93,7 @@ $renderCard = static function (array $req, string $borderClass) use ($statusLabe
             <?php elseif (!$isStorno): ?>
                 <form method="POST" action="/?action=withdraw_request" class="inline">
                     <input type="hidden" name="request_id" value="<?= $rid ?>">
+                    <input type="hidden" name="return_tab" value="calendar">
                     <button type="submit" class="w-full text-red-600 hover:text-white hover:bg-red-500 border border-red-200 px-3 py-2 rounded-xl text-xs font-bold transition-colors">
                         <?= I18n::get('emp.retract') ?>
                     </button>
@@ -99,6 +101,7 @@ $renderCard = static function (array $req, string $borderClass) use ($statusLabe
             <?php else: ?>
                 <form method="POST" action="/?action=withdraw_storno" class="inline">
                     <input type="hidden" name="request_id" value="<?= $rid ?>">
+                    <input type="hidden" name="return_tab" value="calendar">
                     <button type="submit" class="w-full et-btn-secondary px-3 py-2 rounded-xl text-xs font-bold transition-colors">
                         <?= I18n::get('emp.cancel_storno') ?>
                     </button>

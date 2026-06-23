@@ -134,10 +134,10 @@ $sectionPast = I18n::get('history.section.past');
             x-transition:leave="transition ease-in duration-150"
             x-transition:leave-start="opacity-100"
             x-transition:leave-end="opacity-0"
-            class="fixed inset-0 z-[60] overflow-y-auto bg-[#fffdf2] history-detail-panel"
+            class="history-detail-panel"
         >
             <template x-if="selected">
-                <div class="w-full p-4 sm:p-6 lg:p-8">
+                <div class="history-detail-panel__shell">
                     <button
                         type="button"
                         @click="closeDetail()"
@@ -147,7 +147,7 @@ $sectionPast = I18n::get('history.section.past');
                         <?= I18n::get('history.back_to_list') ?>
                     </button>
 
-                    <div class="w-full bg-white rounded-3xl border border-lime-100 shadow-xl p-6 sm:p-7 lg:p-8">
+                    <div class="history-detail-panel__card bg-white rounded-3xl border border-lime-100 shadow-xl p-6 sm:p-7">
                         <div class="flex flex-wrap items-start justify-between gap-4 mb-6">
                             <div class="space-y-3">
                                 <div class="text-xs font-bold uppercase tracking-[0.2em] text-emerald-500" x-text="'Antrag #' + selected.id"></div>
@@ -177,8 +177,8 @@ $sectionPast = I18n::get('history.section.past');
                         <h4 class="text-xs font-bold uppercase tracking-[0.2em] text-[#E8007D] mb-4"><?= I18n::get('history.timeline') ?></h4>
                         <div class="space-y-4 mb-8">
                             <template x-for="(ev, idx) in selected.timeline" :key="idx">
-                                <div class="relative pl-6 border-l-2 border-lime-200">
-                                    <span class="absolute left-[-0.4rem] top-1 h-3 w-3 rounded-full bg-[#E8007D] ring-2 ring-white"></span>
+                                <div class="relative pl-7 ml-0.5 border-l-2 border-lime-200">
+                                    <span class="absolute left-0 top-1 h-3 w-3 -translate-x-1/2 rounded-full bg-[#E8007D] ring-2 ring-white"></span>
                                     <div class="text-xs font-bold text-emerald-500" x-text="ev.at"></div>
                                     <div class="text-sm font-bold text-emerald-900" x-text="ev.label"></div>
                                     <div class="text-xs text-emerald-600" x-show="ev.actor" x-text="ev.actor"></div>

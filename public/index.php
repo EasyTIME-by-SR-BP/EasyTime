@@ -222,14 +222,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'create_request' && $currentRole === 'Employee') {
         $start = $_POST['start_date'] ?? null;
         $end = $_POST['end_date'] ?? null;
-        $netDays = $_POST['net_days'] ?? null;
-        if ($start && $end && $netDays) {
+        if ($start && $end && $end >= $start) {
             $today = date('Y-m-d');
             if ($start < $today || $end < $today) {
                 header("Location: /?error=past_date");
                 exit;
             }
-            $created = VacationRequest::create($currentUser['id'], $start, $end, $netDays);
+            $netDays = VacationRequest::calculateNetDays($start, $end);
+            if ($netDays <= 0) {
+                header("Location: /?error=invalid_request");
+                exit;
+            }
+            $created = VacationRequest::create($currentUser['id'], $start, $end);
             if ($created === 'fenstertage_exceeded') {
                 header("Location: /?error=fenstertage_exceeded");
                 exit;
@@ -247,14 +251,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header("Location: /?tab=calendar&success=created");
             exit;
         }
+        header("Location: /?error=invalid_request");
+        exit;
     }
     
     if ($action === 'withdraw_request' && $currentRole === 'Employee') {
         if (!empty($_POST['request_id'])) {
             $rid = (int) $_POST['request_id'];
-            VacationRequest::withdrawRequest($rid, $currentUser['id']);
-            RequestEvent::log($rid, (int) $currentUser['id'], 'withdrawn');
-            header("Location: /?tab=history&request_id=" . $rid . "&success=action_success");
+            $returnTab = ($_POST['return_tab'] ?? 'calendar') === 'history' ? 'history' : 'calendar';
+            $ok = VacationRequest::withdrawRequest($rid, $currentUser['id']);
+            header('Location: /?tab=' . $returnTab . '&success=' . ($ok ? 'action_success' : 'invalid_request'));
             exit;
         }
     }
@@ -262,11 +268,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'request_storno' && $currentRole === 'Employee') {
         if (!empty($_POST['request_id'])) {
             $rid = (int) $_POST['request_id'];
-            if (VacationRequest::requestStorno($rid, $currentUser['id'])) {
+            $returnTab = ($_POST['return_tab'] ?? 'history') === 'calendar' ? 'calendar' : 'history';
+            $ok = VacationRequest::requestStorno($rid, $currentUser['id']);
+            if ($ok) {
                 NotificationService::onStornoRequested($rid, (int) $currentUser['id']);
                 RequestEvent::log($rid, (int) $currentUser['id'], 'storno_requested');
+                header('Location: /?tab=' . $returnTab . '&request_id=' . $rid . '&success=action_success');
+            } else {
+                header('Location: /?tab=' . $returnTab . '&request_id=' . $rid . '&error=invalid_request');
             }
-            header("Location: /?tab=history&request_id=" . $rid . "&success=action_success");
             exit;
         }
     }
@@ -274,16 +284,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'withdraw_storno' && $currentRole === 'Employee') {
         if (!empty($_POST['request_id'])) {
             $rid = (int) $_POST['request_id'];
-            if (VacationRequest::withdrawStornoRequest($rid, $currentUser['id'])) {
+            $returnTab = ($_POST['return_tab'] ?? 'calendar') === 'history' ? 'history' : 'calendar';
+            $ok = VacationRequest::withdrawStornoRequest($rid, $currentUser['id']);
+            if ($ok) {
                 NotificationService::onStornoWithdrawn($rid, (int) $currentUser['id']);
                 RequestEvent::log($rid, (int) $currentUser['id'], 'storno_withdrawn');
             }
-            $returnTab = ($_POST['return_tab'] ?? 'calendar') === 'history' ? 'history' : 'calendar';
-            $location = '/?tab=' . $returnTab . '&success=action_success';
-            if ($returnTab === 'history' || $returnTab === 'calendar') {
-                $location = '/?tab=' . $returnTab . '&request_id=' . $rid . '&success=action_success';
-            }
-            header('Location: ' . $location);
+            $query = ($ok ? 'success=action_success' : 'error=invalid_request');
+            header('Location: /?tab=' . $returnTab . '&request_id=' . $rid . '&' . $query);
             exit;
         }
     }
@@ -318,9 +326,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($result) {
                 NotificationService::onChangeRequested($rid, (int) $currentUser['id']);
                 RequestEvent::log($rid, (int) $currentUser['id'], 'change_requested', $start . ' – ' . $end . ' (' . $netDays . ' Tage)');
+                $returnTab = ($_POST['return_tab'] ?? 'history') === 'calendar' ? 'calendar' : 'history';
+                header('Location: /?tab=' . $returnTab . '&request_id=' . $rid . '&success=action_success');
+                exit;
             }
             $returnTab = ($_POST['return_tab'] ?? 'history') === 'calendar' ? 'calendar' : 'history';
-            header('Location: /?tab=' . $returnTab . '&request_id=' . $rid . '&success=action_success');
+            header('Location: /?tab=' . $returnTab . '&request_id=' . $rid . '&error=invalid_request');
             exit;
         }
         header('Location: /?error=invalid_request');
@@ -330,11 +341,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'withdraw_change' && $currentRole === 'Employee') {
         if (!empty($_POST['request_id'])) {
             $rid = (int) $_POST['request_id'];
-            if (VacationRequest::withdrawChangeRequest($rid, (int) $currentUser['id'])) {
+            $returnTab = ($_POST['return_tab'] ?? 'history') === 'calendar' ? 'calendar' : 'history';
+            $ok = VacationRequest::withdrawChangeRequest($rid, (int) $currentUser['id']);
+            if ($ok) {
                 RequestEvent::log($rid, (int) $currentUser['id'], 'change_withdrawn');
             }
-            $returnTab = ($_POST['return_tab'] ?? 'history') === 'calendar' ? 'calendar' : 'history';
-            header('Location: /?tab=' . $returnTab . '&request_id=' . $rid . '&success=action_success');
+            $query = ($ok ? 'success=action_success' : 'error=invalid_request');
+            header('Location: /?tab=' . $returnTab . '&request_id=' . $rid . '&' . $query);
             exit;
         }
     }
@@ -368,10 +381,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $before ? ($before['start_date'] . ' – ' . $before['end_date']) : null
             );
             NotificationService::onChangeDecided($requestId, $decision === 'approve', (int) $currentUser['id']);
-            header('Location: /?success=decided');
+            header('Location: /?tab=operations&success=decided');
             exit;
         }
-        header('Location: /?error=invalid_request');
+        header('Location: /?tab=operations&error=invalid_request');
         exit;
     }
 
@@ -397,10 +410,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             RequestEvent::log($requestId, (int) $currentUser['id'], 'dates_adjusted', $previousRange . ' → ' . $start . ' – ' . $end);
             NotificationService::onVacationModified($requestId, $previousRange, (int) $currentUser['id']);
-            header('Location: /?success=action_success');
+            header('Location: /?tab=operations&success=action_success');
             exit;
         }
-        header('Location: /?error=invalid_request');
+        header('Location: /?tab=operations&error=invalid_request');
         exit;
     }
 
@@ -440,7 +453,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (in_array((string) $status, ['approved', 'rejected', 'cancelled'], true)) {
                 NotificationService::onVacationDecided((int) $requestId, (string) $status, (int) $currentUser['id']);
             }
-            header("Location: /?success=decided");
+            header('Location: /?tab=operations&success=decided');
             exit;
         }
     }
@@ -520,10 +533,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 header("Location: /?error=blocked_exists");
                 exit;
             }
-            header("Location: /?success=action_success");
+            header('Location: /?tab=operations&success=action_success');
             exit;
         }
-        header("Location: /?error=invalid_request");
+        header('Location: /?tab=operations&error=invalid_request');
         exit;
     }
 
@@ -539,23 +552,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 header("Location: /?error=past_date");
                 exit;
             }
-            $netDays = (int) ((strtotime($end) - strtotime($start)) / 86400) + 1;
+            $netDays = VacationRequest::calculateNetDays($start, $end);
             if ($netDays <= 0) {
-                header("Location: /?error=invalid_request");
+                header('Location: /?tab=operations&error=invalid_request');
                 exit;
             }
-            $created = VacationRequest::createAdminVacation($userId, $currentUser['id'], $start, $end, $netDays, $comment ?: null);
+            $created = VacationRequest::createAdminVacation($userId, $currentUser['id'], $start, $end, null, $comment ?: null);
+            if ($created === 'insufficient_balance') {
+                header('Location: /?error=insufficient_balance');
+                exit;
+            }
             if (!$created) {
-                header("Location: /?error=request_conflict");
+                header('Location: /?error=request_conflict');
                 exit;
             }
             if ($comment !== '') {
                 RequestComment::create((int) $created, (int) $currentUser['id'], $comment);
             }
-            header("Location: /?success=action_success");
+            header('Location: /?tab=operations&success=action_success');
             exit;
         }
-        header("Location: /?error=invalid_request");
+        header('Location: /?tab=operations&error=invalid_request');
         exit;
     }
 
@@ -563,10 +580,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $blockedId = $_POST['blocked_id'] ?? null;
         if ($blockedId) {
             VacationRequest::deleteBlockedPeriod($blockedId);
-            header("Location: /?success=action_success");
+            header('Location: /?tab=operations&success=action_success');
             exit;
         }
-        header("Location: /?error=invalid_request");
+        header('Location: /?tab=operations&error=invalid_request');
         exit;
     }
 
@@ -616,6 +633,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $today   = date('Y-m-d');
         $created = 0;
         $failed  = 0;
+        $insufficient = false;
 
         // Aufeinanderfolgende Daten zu Zeiträumen zusammenfassen
         $ranges = [];
@@ -635,8 +653,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         foreach ($ranges as $range) {
             if ($range['start'] < $today) { $failed++; continue; }
-            $netDays = (int) ((strtotime($range['end']) - strtotime($range['start'])) / 86400) + 1;
-            $ok = VacationRequest::create($currentUser['id'], $range['start'], $range['end'], $netDays);
+            $netDays = VacationRequest::calculateNetDays($range['start'], $range['end']);
+            $ok = VacationRequest::create($currentUser['id'], $range['start'], $range['end']);
+            if ($ok === 'insufficient_balance') {
+                $insufficient = true;
+                $failed++;
+                continue;
+            }
+            if ($ok === 'fenstertage_exceeded') {
+                $failed++;
+                continue;
+            }
             if (is_int($ok) && $ok > 0) {
                 NotificationService::onVacationRequested($ok, (int) $currentUser['id']);
                 RequestEvent::log($ok, (int) $currentUser['id'], 'created', $range['start'] . ' – ' . $range['end'] . ' (' . $netDays . ' Tage)');
@@ -646,7 +673,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        header("Location: /?tab=calendar&" . ($created > 0 ? "success=created" : "error=request_conflict"));
+        if ($insufficient && $created === 0) {
+            header('Location: /?tab=calendar&error=insufficient_balance');
+            exit;
+        }
+        header('Location: /?tab=calendar&' . ($created > 0 ? 'success=created' : 'error=request_conflict'));
         exit;
     }
 
@@ -679,15 +710,15 @@ if ($isAdmin) {
 
     $selectedTeamUserRequests = [];
     $selectedTeamUserUsedDays = 0;
+    $selectedTeamUserStats = ['entitlement' => 0, 'approved' => 0, 'planned' => 0, 'remaining' => 0];
     if ($selectedTeamUser) {
+        $selectedTeamUserStats = VacationRequest::calculateUserVacationStats((int) $selectedTeamUser['id']);
+        $selectedTeamUserUsedDays = (int) ($selectedTeamUserStats['approved'] ?? 0);
         foreach ($requests as $reqRow) {
             if ((int) $reqRow['user_id'] !== (int) $selectedTeamUser['id']) {
                 continue;
             }
             $selectedTeamUserRequests[] = $reqRow;
-            if ($reqRow['status'] === 'approved') {
-                $selectedTeamUserUsedDays += (int) $reqRow['net_days'];
-            }
         }
     }
 } else {
