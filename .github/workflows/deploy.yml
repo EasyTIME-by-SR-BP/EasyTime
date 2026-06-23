@@ -28,35 +28,6 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.ref }}
-
-      - name: Create deploy archive
-        run: |
-          mkdir -p /tmp/deploy-src
-          rsync -a \
-            --exclude '.git' \
-            --exclude '.env' \
-            --exclude 'node_modules' \
-            --exclude '.cursor' \
-            --exclude 'database/database.sqlite' \
-            --exclude 'ahaappup (1).sql' \
-            ./ /tmp/deploy-src/
-          tar czf deploy.tar.gz -C /tmp/deploy-src .
-          ls -lh deploy.tar.gz
-
-      - name: Upload archive to server
-        uses: appleboy/scp-action@v1
-        with:
-          host: ${{ secrets.SERVER_IP }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.SERVER_SSH_PORT }}
-          source: deploy.tar.gz
-          target: /tmp/easytime-deploy
-
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
         with:
@@ -69,22 +40,30 @@ jobs:
             set -euo pipefail
 
             REPO_DIR=/home/easytime/EasyTime
+            REPO_URL=git@github.com:EasyTIME-by-SR-BP/EasyTime.git
+            REF="${{ inputs.ref }}"
             ENV_BACKUP=/tmp/easytime.env.bak
-            ARCHIVE=/tmp/easytime-deploy/deploy.tar.gz
 
             if [ -f "$REPO_DIR/.env" ]; then
               cp "$REPO_DIR/.env" "$ENV_BACKUP"
             fi
 
-            mkdir -p "$REPO_DIR"
-            tar xzf "$ARCHIVE" -C "$REPO_DIR"
-            rm -f "$ARCHIVE"
+            if [ ! -d "$REPO_DIR/.git" ]; then
+              rm -rf "$REPO_DIR"
+              GIT_SSH_COMMAND="ssh -i ~/.ssh/github_easytime_deploy -o IdentitiesOnly=yes" \
+                git clone "$REPO_URL" "$REPO_DIR"
+            fi
+
+            cd "$REPO_DIR"
+            git remote set-url origin "$REPO_URL"
+            GIT_SSH_COMMAND="ssh -i ~/.ssh/github_easytime_deploy -o IdentitiesOnly=yes" \
+              git fetch origin "$REF"
+            git checkout FETCH_HEAD
 
             if [ -f "$ENV_BACKUP" ]; then
               cp "$ENV_BACKUP" "$REPO_DIR/.env"
             fi
 
-            cd "$REPO_DIR"
             bash scripts/generate-self-signed-cert.sh
 
             ENV_FILE="$REPO_DIR/.env"
@@ -135,4 +114,4 @@ jobs:
 
       - name: Notify deployment complete
         run: |
-          echo "Deployed '${{ inputs.deploy_target }}' from ref '${{ inputs.ref }}' via scp"
+          echo "Deployed '${{ inputs.deploy_target }}' from ref '${{ inputs.ref }}' via git pull on server"

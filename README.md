@@ -101,7 +101,18 @@ Das Terminal offen lassen — der Tunnel endet beim Schließen.
 
 ### Deployment (GitHub Actions)
 
-Syntax wie bei Sesamo — zuerst `git push`, dann:
+Der Server holt den Code per **Deploy Key** selbst (`git fetch` auf dem Server). GitHub Actions führt nur kurze SSH-Befehle aus — kein Datei-Upload.
+
+**Einmalig:** Deploy Key einrichten (auf dem Server oder lokal das Skript hochladen):
+
+```bash
+bash scripts/setup-server-deploy-key.sh
+```
+
+Den angezeigten **Public Key** in GitHub eintragen:  
+Repo → **Settings → Deploy keys → Add deploy key** (nur Read-Zugriff).
+
+Syntax — zuerst `git push`, dann:
 
 ```bash
 pnpm install    # einmalig (tsx)
@@ -117,7 +128,7 @@ pnpm release:[branch]:[target]
 
 GitHub Secrets (im Repo hinterlegt): `SERVER_IP`, `SERVER_USER`, `SERVER_SSH_PORT`, `SSH_PRIVATE_KEY`, `DB_PASSWORD`, `MYSQL_ROOT_PASSWORD`
 
-GitHub Actions checked den gewählten Branch aus und kopiert den Code per **rsync** auf den Server (kein `git pull` auf dem Server nötig — funktioniert auch mit privatem Repo).
+GitHub Actions verbindet sich per SSH mit dem Server; der Server aktualisiert den Code per `git fetch` (Deploy Key).
 
 ### Test-Zugänge (Produktion / MariaDB)
 
