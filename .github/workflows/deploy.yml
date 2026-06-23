@@ -35,14 +35,16 @@ jobs:
 
       - name: Create deploy archive
         run: |
-          tar czf deploy.tar.gz \
-            --exclude='./.git' \
-            --exclude='./.env' \
-            --exclude='./node_modules' \
-            --exclude='./.cursor' \
-            --exclude='./database/database.sqlite' \
-            --exclude='./ahaappup (1).sql' \
-            .
+          mkdir -p /tmp/deploy-src
+          rsync -a \
+            --exclude '.git' \
+            --exclude '.env' \
+            --exclude 'node_modules' \
+            --exclude '.cursor' \
+            --exclude 'database/database.sqlite' \
+            --exclude 'ahaappup (1).sql' \
+            ./ /tmp/deploy-src/
+          tar czf deploy.tar.gz -C /tmp/deploy-src .
           ls -lh deploy.tar.gz
 
       - name: Upload archive to server
