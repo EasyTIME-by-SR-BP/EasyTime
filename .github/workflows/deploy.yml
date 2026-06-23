@@ -58,7 +58,8 @@ jobs:
             git remote set-url origin "$REPO_URL"
             GIT_SSH_COMMAND="ssh -i ~/.ssh/github_easytime_deploy -o IdentitiesOnly=yes" \
               git fetch origin "$REF"
-            git checkout FETCH_HEAD
+            git reset --hard FETCH_HEAD
+            git clean -fd -e .env
 
             if [ -f "$ENV_BACKUP" ]; then
               cp "$ENV_BACKUP" "$REPO_DIR/.env"
