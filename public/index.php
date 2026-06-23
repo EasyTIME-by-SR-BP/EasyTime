@@ -10,8 +10,9 @@ use App\Models\User;
 use App\Models\Request as VacationRequest;
 use App\Models\RequestComment;
 use App\Models\Department;
-use App\Models\Notification;
+use App\Models\RequestEvent;
 use App\Services\NotificationService;
+use App\Services\Inbox;
 use App\Core\I18n;
 use App\Core\AustrianHolidays;
 
@@ -47,8 +48,20 @@ if (!isset($_SESSION['user_id'])) {
             exit;
         }
 
-        if ($action === 'forgot_password' || $action === 'do_reset_password') {
-            header("Location: /?error=invalid_request");
+        if ($action === 'forgot_password') {
+            $login = trim((string) ($_POST['login'] ?? $_POST['email'] ?? ''));
+            if ($login !== '') {
+                $user = User::findByEmailOrMnr($login);
+                if ($user) {
+                    NotificationService::onPasswordResetRequested((int) $user['id']);
+                }
+            }
+            header('Location: /?success=password_reset_requested');
+            exit;
+        }
+
+        if ($action === 'do_reset_password') {
+            header('Location: /?error=invalid_request');
             exit;
         }
     }
@@ -85,6 +98,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'change_password') {
     header("Location: /?success=action_success");
     exit;
 }
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'mark_notification_read') {
+    $notificationId = isset($_POST['notification_id']) ? (int) $_POST['notification_id'] : 0;
+    if ($notificationId > 0) {
+        Inbox::markRead($notificationId, (int) $currentUser['id']);
+    }
+    $inboxFilter = preg_replace('/[^a-z_]/', '', (string) ($_POST['inbox_filter'] ?? 'all')) ?: 'all';
+    header('Location: /?tab=inbox&inbox_filter=' . urlencode($inboxFilter));
+    exit;
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'resolve_notification') {
+    $notificationId = isset($_POST['notification_id']) ? (int) $_POST['notification_id'] : 0;
+    if ($notificationId > 0) {
+        Inbox::resolve($notificationId, (int) $currentUser['id']);
+    }
+    $inboxFilter = preg_replace('/[^a-z_]/', '', (string) ($_POST['inbox_filter'] ?? 'all')) ?: 'all';
+    header('Location: /?tab=inbox&inbox_filter=' . urlencode($inboxFilter));
+    exit;
+}
+
 $requirePasswordChange = false;
 
 if ($action === 'calendar_ics') {
@@ -200,20 +234,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 header("Location: /?error=fenstertage_exceeded");
                 exit;
             }
+            if ($created === 'insufficient_balance') {
+                header("Location: /?error=insufficient_balance");
+                exit;
+            }
             if ($created === false) {
                 header("Location: /?error=request_conflict");
                 exit;
             }
             NotificationService::onVacationRequested((int) $created, (int) $currentUser['id']);
-            header("Location: /?success=created");
+            RequestEvent::log((int) $created, (int) $currentUser['id'], 'created', $start . ' – ' . $end . ' (' . $netDays . ' Tage)');
+            header("Location: /?tab=calendar&success=created");
             exit;
         }
     }
     
     if ($action === 'withdraw_request' && $currentRole === 'Employee') {
         if (!empty($_POST['request_id'])) {
-            VacationRequest::withdrawRequest($_POST['request_id'], $currentUser['id']);
-            header("Location: /?success=action_success");
+            $rid = (int) $_POST['request_id'];
+            VacationRequest::withdrawRequest($rid, $currentUser['id']);
+            RequestEvent::log($rid, (int) $currentUser['id'], 'withdrawn');
+            header("Location: /?tab=history&request_id=" . $rid . "&success=action_success");
             exit;
         }
     }
@@ -223,8 +264,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $rid = (int) $_POST['request_id'];
             if (VacationRequest::requestStorno($rid, $currentUser['id'])) {
                 NotificationService::onStornoRequested($rid, (int) $currentUser['id']);
+                RequestEvent::log($rid, (int) $currentUser['id'], 'storno_requested');
             }
-            header("Location: /?success=action_success");
+            header("Location: /?tab=history&request_id=" . $rid . "&success=action_success");
+            exit;
+        }
+    }
+
+    if ($action === 'withdraw_storno' && $currentRole === 'Employee') {
+        if (!empty($_POST['request_id'])) {
+            $rid = (int) $_POST['request_id'];
+            if (VacationRequest::withdrawStornoRequest($rid, $currentUser['id'])) {
+                NotificationService::onStornoWithdrawn($rid, (int) $currentUser['id']);
+                RequestEvent::log($rid, (int) $currentUser['id'], 'storno_withdrawn');
+            }
+            $returnTab = ($_POST['return_tab'] ?? 'calendar') === 'history' ? 'history' : 'calendar';
+            $location = '/?tab=' . $returnTab . '&success=action_success';
+            if ($returnTab === 'history' || $returnTab === 'calendar') {
+                $location = '/?tab=' . $returnTab . '&request_id=' . $rid . '&success=action_success';
+            }
+            header('Location: ' . $location);
             exit;
         }
     }
@@ -242,8 +301,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($comment !== '') {
                 RequestComment::create((int) $requestId, (int) $currentUser['id'], $comment);
             }
+            $eventType = match ((string) $status) {
+                'approved' => 'approved',
+                'rejected' => 'rejected',
+                'cancelled' => 'cancelled',
+                default => 'updated',
+            };
+            RequestEvent::log((int) $requestId, (int) $currentUser['id'], $eventType);
             if (in_array((string) $status, ['approved', 'rejected', 'cancelled'], true)) {
-                NotificationService::onVacationDecided((int) $requestId, (string) $status);
+                NotificationService::onVacationDecided((int) $requestId, (string) $status, (int) $currentUser['id']);
             }
             header("Location: /?success=decided");
             exit;
@@ -290,6 +356,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             isset($_POST['vacation_entitlement_days']) ? (int) $_POST['vacation_entitlement_days'] : 25,
             isset($_POST['overtime_hours']) ? (float) $_POST['overtime_hours'] : 0
         );
+        if (!empty($_POST['password'])) {
+            NotificationService::onPasswordResetCompleted((int) $_POST['emp_id'], (int) $currentUser['id']);
+        }
         header("Location: /?success=action_success");
         exit;
     }
@@ -371,7 +440,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $canComment = $request && ($isAdmin || (int) $request['user_id'] === (int) $currentUser['id']);
         if ($canComment && $comment !== '') {
             RequestComment::create($requestId, (int) $currentUser['id'], $comment);
-            header("Location: /?success=action_success");
+            $returnTab = ($currentRole === 'Employee') ? 'history' : 'operations';
+            $location = '/?tab=' . $returnTab;
+            if ($currentRole === 'Employee') {
+                $location .= '&request_id=' . $requestId;
+            }
+            header('Location: ' . $location . '&success=action_success');
             exit;
         }
         header("Location: /?error=invalid_request");
@@ -426,13 +500,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $ok = VacationRequest::create($currentUser['id'], $range['start'], $range['end'], $netDays);
             if (is_int($ok) && $ok > 0) {
                 NotificationService::onVacationRequested($ok, (int) $currentUser['id']);
+                RequestEvent::log($ok, (int) $currentUser['id'], 'created', $range['start'] . ' – ' . $range['end'] . ' (' . $netDays . ' Tage)');
                 $created++;
             } else {
                 $failed++;
             }
         }
 
-        header("Location: /?" . ($created > 0 ? "success=created" : "error=request_conflict"));
+        header("Location: /?tab=calendar&" . ($created > 0 ? "success=created" : "error=request_conflict"));
         exit;
     }
 
@@ -481,26 +556,44 @@ if ($isAdmin) {
     $blockedPeriods = VacationRequest::getBlockedPeriods();
 }
 
-$notificationList = Notification::getByUserId((int) $currentUser['id'], 80);
-$notificationUnreadCount = Notification::countUnread((int) $currentUser['id']);
-$activeTab = $_GET['tab'] ?? ($isAdmin ? 'operations' : 'plan');
+$notificationListAll = Inbox::getForUser((int) $currentUser['id'], 80);
+$notificationUnreadCount = Inbox::countUnread((int) $currentUser['id']);
+$activeTab = $_GET['tab'] ?? ($isAdmin ? 'operations' : 'calendar');
+if (!$isAdmin) {
+    if ($activeTab === 'plan') {
+        $activeTab = 'calendar';
+    }
+    if (in_array($activeTab, ['overview', 'comments'], true)) {
+        $activeTab = 'history';
+    }
+}
+$inboxFilter = 'all';
+$inboxCounts = ['all' => 0, 'unread' => 0, 'tasks' => 0, 'password' => 0, 'approval' => 0, 'info' => 0, 'done' => 0];
 if ($isAdmin) {
     if (!in_array($activeTab, ['operations', 'team', 'settings', 'inbox'], true)) {
         $activeTab = 'operations';
     }
 } else {
-    if (!in_array($activeTab, ['plan', 'overview', 'comments', 'inbox'], true)) {
-        $activeTab = 'plan';
+    if (!in_array($activeTab, ['calendar', 'history', 'inbox'], true)) {
+        $activeTab = 'calendar';
     }
 }
+$selectedHistoryRequestId = (!$isAdmin && $activeTab === 'history' && isset($_GET['request_id']))
+    ? (int) $_GET['request_id']
+    : 0;
 if ($activeTab === 'inbox') {
-    Notification::markAllAsRead((int) $currentUser['id']);
-    $notificationUnreadCount = 0;
-    foreach ($notificationList as &$notificationRow) {
-        $notificationRow['is_read'] = 1;
+    $allowedInboxFilters = $isAdmin
+        ? ['all', 'unread', 'tasks', 'password', 'approval', 'info', 'done']
+        : ['all', 'unread', 'info', 'done'];
+    $inboxFilter = (string) ($_GET['inbox_filter'] ?? 'all');
+    if (!in_array($inboxFilter, $allowedInboxFilters, true)) {
+        $inboxFilter = 'all';
     }
-    unset($notificationRow);
+    $inboxCounts = Inbox::computeCounts($notificationListAll);
 }
+$notificationList = ($activeTab === 'inbox')
+    ? Inbox::filterList($notificationListAll, $inboxFilter)
+    : $notificationListAll;
 $userVacationStats = VacationRequest::calculateUserVacationStats($currentUser['id']);
 $minStaffAvailable = (int) VacationRequest::getSetting('min_staff_available', '1');
 $maxFenstertage    = (int) VacationRequest::getSetting('max_fenstertage', '0');
@@ -509,38 +602,62 @@ if ($isAdmin) {
     AustrianHolidays::warmCache([$y, $y + 1]);
 }
 $requestCommentsById = RequestComment::getByRequestIds(array_column($requests, 'id'));
+$requestEventsById = RequestEvent::getGroupedByRequestIds(array_column($requests, 'id'));
 $recentAuditLogs = [];
 $capacitySummary = $isAdmin ? VacationRequest::getCapacitySummary(date('Y-m-d'), date('Y-m-d', strtotime('+30 days'))) : null;
 
 // Prepare FullCalendar events
+$requestStatusEventStyles = [
+    'approved'         => ['bg' => '#16A34A', 'text' => '#ffffff'],
+    'pending'          => ['bg' => '#F59E0B', 'text' => '#1a1a1a'],
+    'storno_requested' => ['bg' => '#EA580C', 'text' => '#ffffff'],
+    'rejected'         => ['bg' => '#DC2626', 'text' => '#ffffff'],
+    'cancelled'        => ['bg' => '#9CA3AF', 'text' => '#ffffff'],
+];
+
 $fcEvents = [];
 foreach ($requests as $r) {
-    if ($r['status'] === 'rejected' || $r['status'] === 'cancelled') continue;
-    
-    $title = ($isAdmin) ? $r['firstname'] . ' ' . $r['lastname'] : I18n::get('emp.plan');
-    if ($r['status'] === 'pending') $title .= ' (' . I18n::get('emp.status_pending') . ')';
-    if ($r['status'] === 'storno_requested') $title .= ' (' . I18n::get('emp.status_storno_requested') . ')';
-    
+    $status = (string) ($r['status'] ?? 'pending');
+    $style = $requestStatusEventStyles[$status] ?? $requestStatusEventStyles['pending'];
+
+    if ($isAdmin) {
+        $title = $r['firstname'] . ' ' . $r['lastname'];
+        $statusTitle = match ($status) {
+            'approved'         => I18n::get('emp.status_approved'),
+            'pending'          => I18n::get('emp.status_pending'),
+            'storno_requested' => I18n::get('emp.status_storno_requested'),
+            'rejected'         => I18n::get('emp.status_rejected'),
+            'cancelled'        => I18n::get('emp.status_cancelled'),
+            default            => $status,
+        };
+        $title .= ' (' . $statusTitle . ')';
+    } else {
+        $title = match ($status) {
+            'approved'         => I18n::get('emp.status_approved'),
+            'pending'          => I18n::get('emp.status_pending'),
+            'storno_requested' => I18n::get('emp.status_storno_requested'),
+            'rejected'         => I18n::get('emp.status_rejected'),
+            'cancelled'        => I18n::get('emp.status_cancelled'),
+            default            => I18n::get('emp.plan'),
+        };
+    }
+
     // FullCalendar end bounds are exclusive
     $endDateStr = date('Y-m-d', strtotime($r['end_date'] . ' +1 day'));
-    
-    $color = '#E8007D';
-    if ($r['status'] === 'pending') $color = '#FFD600';
-    if ($r['status'] === 'storno_requested') $color = '#1a1a1a';
-    
+
     $fcEvents[] = [
         'id' => $r['id'],
         'title' => $title,
         'start' => $r['start_date'],
         'end' => $endDateStr,
-        'backgroundColor' => $color,
-        'borderColor' => $color,
-        'textColor' => ($r['status'] === 'pending') ? '#1a1a1a' : '#fff',
+        'backgroundColor' => $style['bg'],
+        'borderColor' => $style['bg'],
+        'textColor' => $style['text'],
         'allDay' => true,
         'extendedProps' => [
-            'status' => $r['status'],
-            'requestId' => $r['id']
-        ]
+            'status' => $status,
+            'requestId' => $r['id'],
+        ],
     ];
 }
 
@@ -552,8 +669,8 @@ foreach ($blockedPeriods as $b) {
         'start' => $b['start_date'],
         'end' => $endDateStr,
         'display' => 'background',
-        'backgroundColor' => 'rgba(232, 0, 125, 0.16)',
-        'borderColor' => 'rgba(26, 26, 26, 0.35)',
+        'backgroundColor' => 'rgba(107, 114, 128, 0.12)',
+        'borderColor' => 'rgba(107, 114, 128, 0.35)',
         'allDay' => true,
         'extendedProps' => [
             'isBlocked' => true,

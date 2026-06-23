@@ -11,7 +11,9 @@
     "release:main:full": "pnpm release main:full",
     "release:main:web": "pnpm release main:web",
     "release:main:nginx": "pnpm release main:nginx",
-    "release:main:db": "pnpm release main:db"
+    "release:main:db": "pnpm release main:db",
+    "prod": "bash scripts/tunnel.sh",
+    "tunnel": "pnpm prod"
   },
   "devDependencies": {
     "tsx": "^4.21.0",

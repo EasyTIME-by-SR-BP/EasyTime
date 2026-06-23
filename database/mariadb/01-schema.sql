@@ -233,13 +233,21 @@ CREATE TABLE IF NOT EXISTS app_settings (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS notifications (
-  id         INT AUTO_INCREMENT PRIMARY KEY,
-  user_id    INT NOT NULL,
-  title      VARCHAR(255) NOT NULL,
-  message    TEXT NOT NULL,
-  category   VARCHAR(32) DEFAULT 'info',
-  is_read    TINYINT DEFAULT 0,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  id                  INT AUTO_INCREMENT PRIMARY KEY,
+  user_id             INT NOT NULL,
+  title               VARCHAR(255) NOT NULL,
+  message             TEXT NOT NULL,
+  category            VARCHAR(32) DEFAULT 'info',
+  type                VARCHAR(16) DEFAULT 'info',
+  resolution_mode     VARCHAR(16) DEFAULT 'individual',
+  thread_id           VARCHAR(64) DEFAULT NULL,
+  action_url          TEXT DEFAULT NULL,
+  related_user_id     INT DEFAULT NULL,
+  is_read             TINYINT DEFAULT 0,
+  is_resolved         TINYINT DEFAULT 0,
+  resolved_at         DATETIME DEFAULT NULL,
+  resolved_by_user_id INT DEFAULT NULL,
+  created_at          DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES mitarbeiter(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

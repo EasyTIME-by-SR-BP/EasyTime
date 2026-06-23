@@ -37,6 +37,5 @@ try {
 }
 
 echo "Datenbank wurde mit Demo-Daten neu befüllt.\n";
-echo "Die drei Standard-Testuser (Admin, Lisa, Tom) sind unverändert.\n";
-echo "Alle anderen Änderungen (Urlaube, neue User, Einstellungen, …) wurden verworfen.\n\n";
+echo "Alle Daten wurden zurückgesetzt (2 Admins, 10 Mitarbeiter).\n\n";
 echo DatabaseSeeder::credentialsHelp() . "\n";

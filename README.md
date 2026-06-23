@@ -11,10 +11,9 @@ Datenbank: `database/database.sqlite` (wird beim ersten Start automatisch angele
 
 ### Demo-Daten neu laden
 
-Alle **Demo-Inhalte** (Standorte, Urlaube, Events, Tätigkeiten, …) werden zurückgesetzt und neu erzeugt.  
-**Nicht** betroffen sind nur die drei festen Test-Accounts (Admin, Lisa, Tom) mit den Logins unten.
+Alle **Demo-Inhalte** (Standorte, Urlaube, Events, User, …) werden zurückgesetzt und neu erzeugt.
 
-**Wichtig:** Eigene Änderungen in der App (neue Mitarbeiter, geänderte Urlaubsanträge, App-Einstellungen, Kommentare, …) gehen beim Reseed **verloren** und werden nicht gespeichert.
+**Wichtig:** Eigene Änderungen in der App gehen beim Reseed **verloren**.
 
 ```bash
 pnpm db:seed
@@ -23,13 +22,18 @@ pnpm db:seed
 
 ### Test-Zugänge
 
-| Rolle | Login (E-Mail oder Personal-ID) | Passwort |
-|--------|----------------------------------|----------|
-| **Administrator** | `admin@firma.at` oder `A001` | `admin` |
-| **Mitarbeiter** | `lisa@firma.at` oder `M002` | `password` |
-| **Mitarbeiter** | `tom@firma.at` oder `M003` | `password` |
+Login mit **Personal-ID** (z. B. `A001`, `M003`) oder **E-Mail**. Passwort für alle: **`easytime`**
 
-Für Admin-Funktionen: **Administrator**-Account. Für die normale Mitarbeiter-Ansicht: **Lisa** oder **Tom**.
+| Rolle | Personal-ID | Name | E-Mail |
+|--------|-------------|------|--------|
+| **Administrator** | `A001` | Stefan Reich | `a001@demo.easytime.at` |
+| **Administrator** | `A002` | Maria Höll | `a002@demo.easytime.at` |
+| Mitarbeiter | `M001`–`M010` | siehe Inbox/Admin | `m001@demo.easytime.at` … |
+
+```bash
+pnpm db:seed
+# oder: php scripts/seed-database.php
+```
 
 ---
 
@@ -44,6 +48,108 @@ docker compose up -d --build
 ```
 
 Legacy-Daten: `python3 database/convert_import.py` → `docker compose --profile migrate run --rm migrate`
+
+---
+
+## Produktion (Server WIBS)
+
+EasyTime läuft auf einem Server bei **WIBS** (Gamsjäger Kabel-TV & ISP), Standort Ybbs/NÖ.
+
+| | Wert |
+|---|---|
+| **Öffentliche IP** | `85.255.151.186` |
+| **Hostname (intern)** | `mgmt` |
+| **Interne VM-IP** | `192.168.100.5` |
+| **SSH-User** | `easytime` |
+| **SSH-Port** | `22333` |
+| **Projekt auf Server** | `/home/easytime/EasyTime` |
+| **Anbieter** | [wibs.at](https://www.wibs.at) · Tel. +43 7412 52249 · office@wibs.at |
+
+Passwort und Zugangsdaten stehen in der lokalen `.env` (nicht in Git).
+
+### Deployte App testen (SSH-Tunnel)
+
+Ports **80** und **445** sind von außen aktuell **nicht** freigegeben (nur SSH `22333`).  
+Zum Testen der live deployten App vom Mac:
+
+```bash
+cp .env.example .env          # einmalig, SERVER_SSH_PASSWORD setzen
+brew install hudochenkov/sshpass/sshpass   # einmalig auf macOS
+pnpm prod
+```
+
+Dann im Browser: **http://localhost:9080**
+
+| Befehl | Was passiert |
+|---|---|
+| `pnpm dev` | Lokal entwickeln (SQLite) |
+| `pnpm prod` | Deployte App per SSH-Tunnel öffnen |
+| `pnpm release:main:full` | Auf Server deployen |
+
+Das Terminal offen lassen — der Tunnel endet beim Schließen.
+
+### Öffentliche URLs (wenn WIBS Port freischaltet)
+
+| Zugang | URL |
+|---|---|
+| HTTP | `http://85.255.151.186` |
+| HTTPS (selbstsigniert, Warnung OK) | `https://85.255.151.186:445` |
+
+**Portfreigabe anfragen** (geht nicht per SSH, nur über WIBS/Schule):
+
+> Port **80** oder **445** von `85.255.151.186` → interne VM `192.168.100.5`
+
+### Deployment (GitHub Actions)
+
+Syntax wie bei Sesamo — zuerst `git push`, dann:
+
+```bash
+pnpm install    # einmalig (tsx)
+pnpm release:[branch]:[target]
+```
+
+| Befehl | Deployt |
+|---|---|
+| `pnpm release:main:full` | Web + DB + Nginx |
+| `pnpm release:main:web` | Nur PHP-App |
+| `pnpm release:main:nginx` | Nur Nginx |
+| `pnpm release:main:db` | Nur MariaDB |
+
+GitHub Secrets (im Repo hinterlegt): `SERVER_IP`, `SERVER_USER`, `SERVER_SSH_PORT`, `SSH_PRIVATE_KEY`, `DB_PASSWORD`, `MYSQL_ROOT_PASSWORD`
+
+Der Server holt den Code per `git pull` von GitHub — kein manuelles Hochladen nötig.
+
+### Test-Zugänge (Produktion / MariaDB)
+
+Gleiches Schema wie lokal — Personal-ID oder E-Mail, Passwort **`easytime`**:
+
+| Rolle | Personal-ID | Login |
+|---|---|---|
+| Administrator | `A001`, `A002` | z. B. `A001` / `a001@demo.easytime.at` |
+| Mitarbeiter | `M001`–`M010` | z. B. `M003` / `m003@demo.easytime.at` |
+
+Datenbank auf dem Server zurücksetzen (z. B. beim Deploy):
+
+```bash
+pnpm release main:full   # mit reset_database=true in GitHub Actions
+# oder auf dem Server:
+docker compose exec web php scripts/seed-mariadb.php
+```
+
+`pnpm db:seed` funktioniert nur mit SQLite (lokale Entwicklung).
+
+### Architektur auf dem Server
+
+```
+Internet → WIBS-Gateway → VM (192.168.100.5)
+                              ├── easytime-nginx  (Port 80, 445 nach außen)
+                              ├── easytime-web    (PHP/Apache)
+                              └── easytime-db     (MariaDB)
+```
+
+- **Lokal entwickeln:** `docker compose up` auf Docker Desktop → `http://localhost:8080`
+- **Produktion deployen:** `pnpm release:main:full`
+- **Produktion testen:** `pnpm prod` → `http://localhost:9080`
 
 ---
 

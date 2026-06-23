@@ -1,7 +1,6 @@
 <?php
 use App\Core\I18n;
 
-$isReset = isset($_GET['action']) && $_GET['action'] === 'reset_password' && isset($_GET['token']);
 $isForgot = isset($_GET['forgot']);
 ?>
 <!DOCTYPE html>
@@ -109,6 +108,7 @@ $isForgot = isset($_GET['forgot']);
         window.tailwind.config = window.easytimeTailwindConfig;
     </script>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <?php include __DIR__ . '/partials/design-tokens.php'; ?>
     <style>
         body { font-family: 'Outfit', sans-serif; background-color: #fffdf2; color: #1a1a1a; }
     </style>
@@ -144,9 +144,7 @@ $isForgot = isset($_GET['forgot']);
             <div class="text-center">
                 <img src="/assets/icons/urlaubsplaner_icon.svg" alt="Urlaubsplaner" class="mx-auto mb-6 h-16 w-16 rounded-2xl shadow-lg shadow-lime-400/30">
                 <h2 class="text-3xl font-bold text-emerald-900 tracking-tight">Easy<span class="text-lime-600">Time</span></h2>
-                <?php if ($isReset): ?>
-                    <p class="mt-2 text-emerald-600"><?= I18n::get('newpw.title') ?></p>
-                <?php elseif ($isForgot): ?>
+                <?php if ($isForgot): ?>
                     <p class="mt-2 text-emerald-600"><?= I18n::get('reset.title') ?></p>
                 <?php else: ?>
                     <p class="mt-2 text-emerald-600"><?= I18n::get('login.welcome') ?></p>
@@ -167,42 +165,26 @@ $isForgot = isset($_GET['forgot']);
 
             <?php if (isset($_GET['success'])): ?>
                 <div class="bg-lime-50 border border-lime-200 text-lime-700 text-sm px-4 py-3 rounded-xl text-center font-medium">
-                    <?php 
-                        if ($_GET['success'] === 'password_reset_sent') echo I18n::get('msg.password_reset_sent');
-                        elseif ($_GET['success'] === 'action_success') echo I18n::get('msg.action_success');
+                    <?php
+                        if ($_GET['success'] === 'password_reset_requested') {
+                            echo I18n::get('msg.password_reset_requested');
+                        } elseif ($_GET['success'] === 'action_success') {
+                            echo I18n::get('msg.action_success');
+                        }
                     ?>
                 </div>
             <?php endif; ?>
 
-            <?php if ($isReset): ?>
-                <!-- RESET PASSWORD FORM -->
-                <form class="mt-8 space-y-6" action="/?action=do_reset_password" method="POST">
-                    <input type="hidden" name="token" value="<?= htmlspecialchars($_GET['token']) ?>">
-                    <div>
-                        <label for="password" class="block text-sm font-semibold text-emerald-800 mb-1.5"><?= I18n::get('newpw.password') ?></label>
-                        <div class="relative">
-                            <input id="password" name="password" type="password" required class="appearance-none relative block w-full px-4 py-3 border border-yellow-200 bg-yellow-50/50 text-emerald-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-lime-400 transition-all font-medium">
-                            <button type="button" onclick="togglePw('password')" class="absolute inset-y-0 right-0 pr-3 flex items-center text-emerald-500 hover:text-lime-600">
-                                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-                            </button>
-                        </div>
-                    </div>
-                    <div>
-                        <button type="submit" class="w-full flex justify-center py-3.5 px-4 border border-transparent text-sm font-bold rounded-xl text-emerald-900 bg-lime-400 hover:bg-lime-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-lime-500 transition-all shadow-lg shadow-lime-400/40">
-                            <?= I18n::get('newpw.submit') ?>
-                        </button>
-                    </div>
-                </form>
-            <?php elseif ($isForgot): ?>
+            <?php if ($isForgot): ?>
                 <!-- FORGOT PASSWORD FORM -->
                 <form class="mt-8 space-y-6" action="/?action=forgot_password" method="POST">
                     <div>
                         <p class="text-sm text-emerald-600 mb-4"><?= I18n::get('reset.info') ?></p>
-                        <label for="email" class="block text-sm font-semibold text-emerald-800 mb-1.5"><?= I18n::get('reset.email') ?></label>
-                        <input id="email" name="email" type="email" required class="appearance-none relative block w-full px-4 py-3 border border-yellow-200 bg-yellow-50/50 text-emerald-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-lime-400 transition-all font-medium">
+                        <label for="login" class="block text-sm font-semibold text-emerald-800 mb-1.5"><?= I18n::get('reset.login') ?></label>
+                        <input id="login" name="login" type="text" pattern="[a-zA-Z0-9@.\-_]+" required class="appearance-none relative block w-full px-4 py-3 border border-yellow-200 bg-yellow-50/50 text-emerald-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-lime-400 transition-all font-medium">
                     </div>
                     <div class="flex flex-col gap-3">
-                        <button type="submit" class="w-full flex justify-center py-3.5 px-4 border border-transparent text-sm font-bold rounded-xl text-emerald-900 bg-lime-400 hover:bg-lime-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-lime-500 transition-all shadow-lg shadow-lime-400/40">
+                        <button type="submit" class="et-btn-primary w-full flex justify-center py-3.5 px-4 border border-transparent text-sm font-bold rounded-xl focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-lime-500 transition-all shadow-lg shadow-lime-400/40">
                             <?= I18n::get('reset.send') ?>
                         </button>
                         <a href="/" class="text-center text-sm font-medium text-emerald-600 hover:text-lime-600 transition-colors">
@@ -240,7 +222,7 @@ $isForgot = isset($_GET['forgot']);
                     </div>
     
                     <div>
-                        <button type="submit" class="w-full flex justify-center py-3.5 px-4 border border-transparent text-sm font-bold rounded-xl text-emerald-900 bg-lime-400 hover:bg-lime-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-lime-500 transition-all shadow-lg shadow-lime-400/40">
+                        <button type="submit" class="et-btn-primary w-full flex justify-center py-3.5 px-4 border border-transparent text-sm font-bold rounded-xl focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-lime-500 transition-all shadow-lg shadow-lime-400/40">
                             <?= I18n::get('login.sign_in') ?>
                         </button>
                     </div>

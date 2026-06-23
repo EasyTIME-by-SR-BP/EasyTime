@@ -18,6 +18,11 @@ on:
         required: true
         default: "main"
         type: string
+      reset_database:
+        description: "Reset MariaDB and load demo seed data"
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   deploy:
@@ -87,6 +92,10 @@ jobs:
             if [ "$TARGET" = "full" ]; then
               run_compose up -d --build
               run_compose restart nginx || true
+              if [ "${{ inputs.reset_database }}" = "true" ]; then
+                echo "Resetting MariaDB and loading demo seed..."
+                run_compose exec -T web php scripts/seed-mariadb.php
+              fi
             elif [ "$TARGET" = "web" ]; then
               run_compose up -d --build web
               run_compose restart nginx || true

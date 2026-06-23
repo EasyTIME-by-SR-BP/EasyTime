@@ -141,6 +141,23 @@ class User {
         return self::mapEmployeeRow($row);
     }
 
+    public static function findByEmailOrMnr(string $emailOrMnr): ?array {
+        $db = Database::getConnection();
+        $normalizedStaffId = self::normalizeStaffIdentifier($emailOrMnr);
+        $stmt = $db->prepare("
+            SELECT *
+            FROM mitarbeiter
+            WHERE email = ? OR personal_id = ? OR personal_id = ?
+            LIMIT 1
+        ");
+        $stmt->execute([$emailOrMnr, $emailOrMnr, $normalizedStaffId]);
+        $row = $stmt->fetch();
+        if (!$row) {
+            return null;
+        }
+        return self::mapEmployeeRow($row);
+    }
+
     private static function mapRoleToSchemaValue(string $role): string {
         return strtolower($role) === 'admin' || strtolower($role) === 'ceo'
             ? 'Administrator'

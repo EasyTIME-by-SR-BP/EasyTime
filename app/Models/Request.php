@@ -84,6 +84,11 @@ class Request {
             return false;
         }
 
+        $stats = self::calculateUserVacationStats($userId);
+        if ((int) $netDays > (int) ($stats['remaining'] ?? 0)) {
+            return 'insufficient_balance';
+        }
+
         // Fenstertage-Limit prüfen (0 = deaktiviert)
         $maxFenstertage = (int) self::getSetting('max_fenstertage', '0');
         if ($maxFenstertage > 0 && self::countFenstertage((string) $startDate, (string) $endDate) > $maxFenstertage) {
@@ -158,6 +163,12 @@ class Request {
     public static function requestStorno($id, $userId) {
         $db   = Database::getConnection();
         $stmt = $db->prepare("UPDATE urlaub SET genehmigt = 3 WHERE id = ? AND mitarbeiter_id = ? AND COALESCE(genehmigt, 0) = 1");
+        return $stmt->execute([(int) $id, (int) $userId]);
+    }
+
+    public static function withdrawStornoRequest($id, $userId) {
+        $db   = Database::getConnection();
+        $stmt = $db->prepare("UPDATE urlaub SET genehmigt = 1 WHERE id = ? AND mitarbeiter_id = ? AND COALESCE(genehmigt, 0) = 3");
         return $stmt->execute([(int) $id, (int) $userId]);
     }
 

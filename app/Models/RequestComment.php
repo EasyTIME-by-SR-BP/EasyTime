@@ -13,7 +13,11 @@ class RequestComment {
 
         $db   = Database::getConnection();
         $stmt = $db->prepare("INSERT INTO urlaub_kommentar (urlaub_id, mitarbeiter_id, kommentar) VALUES (?, ?, ?)");
-        return $stmt->execute([(int) $requestId, (int) $userId, $trimmed]);
+        $ok = $stmt->execute([(int) $requestId, (int) $userId, $trimmed]);
+        if ($ok) {
+            RequestEvent::log((int) $requestId, (int) $userId, 'comment', $trimmed);
+        }
+        return $ok;
     }
 
     public static function getByRequestId($requestId) {

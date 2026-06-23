@@ -121,16 +121,26 @@ class Database {
             $db->exec("INSERT IGNORE INTO app_settings (`key`, `value`) VALUES ('max_fenstertage', '0')");
             $db->exec("
                 CREATE TABLE IF NOT EXISTS notifications (
-                    id         INT AUTO_INCREMENT PRIMARY KEY,
-                    user_id    INT NOT NULL,
-                    title      VARCHAR(255) NOT NULL,
-                    message    TEXT NOT NULL,
-                    category   VARCHAR(32) DEFAULT 'info',
-                    is_read    TINYINT DEFAULT 0,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    id                  INT AUTO_INCREMENT PRIMARY KEY,
+                    user_id             INT NOT NULL,
+                    title               VARCHAR(255) NOT NULL,
+                    message             TEXT NOT NULL,
+                    category            VARCHAR(32) DEFAULT 'info',
+                    type                VARCHAR(16) DEFAULT 'info',
+                    resolution_mode     VARCHAR(16) DEFAULT 'individual',
+                    thread_id           VARCHAR(64) DEFAULT NULL,
+                    action_url          TEXT DEFAULT NULL,
+                    related_user_id     INT DEFAULT NULL,
+                    is_read             TINYINT DEFAULT 0,
+                    is_resolved         TINYINT DEFAULT 0,
+                    resolved_at         DATETIME DEFAULT NULL,
+                    resolved_by_user_id INT DEFAULT NULL,
+                    created_at          DATETIME DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (user_id) REFERENCES mitarbeiter(id) ON DELETE CASCADE
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
             ");
+            self::ensureNotificationColumns($db);
+            self::ensureRequestEventsTable($db);
             return;
         }
 
@@ -168,16 +178,114 @@ class Database {
 
         $db->exec("
             CREATE TABLE IF NOT EXISTS notifications (
-                id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id    INTEGER NOT NULL,
-                title      TEXT NOT NULL,
-                message    TEXT NOT NULL,
-                category   TEXT DEFAULT 'info',
-                is_read    INTEGER DEFAULT 0,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id             INTEGER NOT NULL,
+                title               TEXT NOT NULL,
+                message             TEXT NOT NULL,
+                category            TEXT DEFAULT 'info',
+                type                TEXT DEFAULT 'info',
+                resolution_mode     TEXT DEFAULT 'individual',
+                thread_id           TEXT DEFAULT NULL,
+                action_url          TEXT DEFAULT NULL,
+                related_user_id     INTEGER DEFAULT NULL,
+                is_read             INTEGER DEFAULT 0,
+                is_resolved         INTEGER DEFAULT 0,
+                resolved_at         DATETIME DEFAULT NULL,
+                resolved_by_user_id INTEGER DEFAULT NULL,
+                created_at          DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(user_id) REFERENCES mitarbeiter(id) ON DELETE CASCADE
             )
         ");
+        self::ensureNotificationColumns($db);
+        self::ensureRequestEventsTable($db);
+    }
+
+    private static function ensureRequestEventsTable(PDO $db): void {
+        if (self::isMysql()) {
+            $db->exec("
+                CREATE TABLE IF NOT EXISTS urlaub_ereignis (
+                    id             INT AUTO_INCREMENT PRIMARY KEY,
+                    urlaub_id      INT NOT NULL,
+                    mitarbeiter_id INT NOT NULL,
+                    ereignis       VARCHAR(32) NOT NULL,
+                    nachricht      TEXT DEFAULT NULL,
+                    erstellt_am    DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (urlaub_id) REFERENCES urlaub(id) ON DELETE CASCADE,
+                    FOREIGN KEY (mitarbeiter_id) REFERENCES mitarbeiter(id) ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            ");
+            return;
+        }
+        $db->exec("
+            CREATE TABLE IF NOT EXISTS urlaub_ereignis (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                urlaub_id      INTEGER NOT NULL,
+                mitarbeiter_id INTEGER NOT NULL,
+                ereignis       TEXT NOT NULL,
+                nachricht      TEXT DEFAULT NULL,
+                erstellt_am    DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(urlaub_id) REFERENCES urlaub(id) ON DELETE CASCADE,
+                FOREIGN KEY(mitarbeiter_id) REFERENCES mitarbeiter(id) ON DELETE CASCADE
+            )
+        ");
+    }
+
+    private static function ensureNotificationColumns(PDO $db): void {
+        $columns = [
+            'type'                => self::isMysql() ? "VARCHAR(16) DEFAULT 'info'" : "TEXT DEFAULT 'info'",
+            'resolution_mode'     => self::isMysql() ? "VARCHAR(16) DEFAULT 'individual'" : "TEXT DEFAULT 'individual'",
+            'thread_id'           => self::isMysql() ? 'VARCHAR(64) DEFAULT NULL' : 'TEXT DEFAULT NULL',
+            'action_url'          => 'TEXT DEFAULT NULL',
+            'related_user_id'     => self::isMysql() ? 'INT DEFAULT NULL' : 'INTEGER DEFAULT NULL',
+            'is_resolved'         => self::isMysql() ? 'TINYINT DEFAULT 0' : 'INTEGER DEFAULT 0',
+            'resolved_at'         => 'DATETIME DEFAULT NULL',
+            'resolved_by_user_id' => self::isMysql() ? 'INT DEFAULT NULL' : 'INTEGER DEFAULT NULL',
+        ];
+
+        foreach ($columns as $name => $definition) {
+            if (self::columnExists($db, 'notifications', $name)) {
+                continue;
+            }
+            $db->exec("ALTER TABLE notifications ADD COLUMN {$name} {$definition}");
+        }
+
+        if (self::columnExists($db, 'notifications', 'resolution_mode')) {
+            $db->exec("
+                UPDATE notifications
+                SET resolution_mode = 'shared'
+                WHERE thread_id IS NOT NULL
+                  AND thread_id != ''
+                  AND thread_id NOT LIKE 'individual_%'
+                  AND (resolution_mode IS NULL OR resolution_mode = '' OR resolution_mode = 'individual')
+            ");
+            $db->exec("
+                UPDATE notifications
+                SET resolution_mode = 'individual'
+                WHERE resolution_mode IS NULL OR resolution_mode = ''
+            ");
+        }
+    }
+
+    private static function columnExists(PDO $db, string $table, string $column): bool {
+        if (self::isMysql()) {
+            $stmt = $db->prepare("
+                SELECT COUNT(*)
+                FROM information_schema.columns
+                WHERE table_schema = DATABASE()
+                  AND table_name = ?
+                  AND column_name = ?
+            ");
+            $stmt->execute([$table, $column]);
+            return (int) $stmt->fetchColumn() > 0;
+        }
+
+        $stmt = $db->query("PRAGMA table_info({$table})");
+        foreach ($stmt->fetchAll() as $row) {
+            if (($row['name'] ?? '') === $column) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static function initializeSchema() {
@@ -413,9 +521,6 @@ class Database {
     }
 
     public static function reseed(): void {
-        if (self::isMysql()) {
-            throw new \RuntimeException('Reseed ist nur für SQLite (lokale Entwicklung) vorgesehen.');
-        }
         $pdo = self::getConnection();
         DatabaseSeeder::resetAndSeed($pdo);
         self::$instance = $pdo;

@@ -2,87 +2,74 @@
 
 namespace App\Core;
 
+use App\Models\Notification;
+use App\Models\RequestEvent;
+use App\Services\Inbox;
 use PDO;
 
 /**
- * Demo-/Testdaten für lokale Entwicklung (SQLite).
- * Die drei Standard-Testuser (IDs 1–3) bleiben beim Reseed erhalten (Login-Daten unverändert).
+ * Demo-/Testdaten für lokale Entwicklung (SQLite) und Produktion (MariaDB).
  */
 class DatabaseSeeder {
-    /** @var list<int> */
-    public const PRESERVED_USER_IDS = [1, 2, 3];
+    public const DEMO_PASSWORD = 'easytime';
 
     /** @var list<array<string, mixed>> */
-    private const PRESERVED_USERS = [
-        [
-            'id'              => 1,
-            'personal_id'     => 'A001',
-            'vorname'         => 'Admin',
-            'nachname'        => 'User',
-            'email'           => 'admin@firma.at',
-            'position'        => 'Leitung',
-            'password'        => 'admin',
-            'berechtigung'    => 'Administrator',
-            'urlaubsanspruch' => 240,
-            'akt_wochen_std'  => 40,
-        ],
-        [
-            'id'              => 2,
-            'personal_id'     => 'M002',
-            'vorname'         => 'Lisa',
-            'nachname'        => 'Muster',
-            'email'           => 'lisa@firma.at',
-            'position'        => 'Mitarbeiter',
-            'password'        => 'password',
-            'berechtigung'    => 'Mitarbeiter',
-            'urlaubsanspruch' => 200,
-            'akt_wochen_std'  => 38,
-        ],
-        [
-            'id'              => 3,
-            'personal_id'     => 'M003',
-            'vorname'         => 'Tom',
-            'nachname'        => 'Beispiel',
-            'email'           => 'tom@firma.at',
-            'position'        => 'Mitarbeiter',
-            'password'        => 'password',
-            'berechtigung'    => 'Mitarbeiter',
-            'urlaubsanspruch' => 200,
-            'akt_wochen_std'  => 40,
-        ],
+    private const USERS = [
+        ['id' => 1,  'personal_id' => 'A001', 'vorname' => 'Stefan',  'nachname' => 'Reich',   'email' => 'a001@demo.easytime.at', 'position' => 'Leitung',           'berechtigung' => 'Administrator', 'urlaubsanspruch' => 240, 'akt_wochen_std' => 40, 'klasse' => 'B - Personenkraftwagen'],
+        ['id' => 2,  'personal_id' => 'A002', 'vorname' => 'Maria',   'nachname' => 'Höll',    'email' => 'a002@demo.easytime.at', 'position' => 'Geschäftsführung',  'berechtigung' => 'Administrator', 'urlaubsanspruch' => 240, 'akt_wochen_std' => 40, 'klasse' => 'B - Personenkraftwagen'],
+        ['id' => 3,  'personal_id' => 'M001', 'vorname' => 'Anna',    'nachname' => 'Berger',  'email' => 'm001@demo.easytime.at', 'position' => 'Fahrlehrerin',      'berechtigung' => 'Mitarbeiter',   'urlaubsanspruch' => 200, 'akt_wochen_std' => 38, 'klasse' => 'B - Personenkraftwagen'],
+        ['id' => 4,  'personal_id' => 'M002', 'vorname' => 'Lukas',   'nachname' => 'Gruber',  'email' => 'm002@demo.easytime.at', 'position' => 'Fahrlehrer',        'berechtigung' => 'Mitarbeiter',   'urlaubsanspruch' => 200, 'akt_wochen_std' => 40, 'klasse' => 'B - Personenkraftwagen'],
+        ['id' => 5,  'personal_id' => 'M003', 'vorname' => 'Sophie',  'nachname' => 'Wagner',  'email' => 'm003@demo.easytime.at', 'position' => 'Fahrlehrerin',      'berechtigung' => 'Mitarbeiter',   'urlaubsanspruch' => 200, 'akt_wochen_std' => 38, 'klasse' => 'A - Motorrad'],
+        ['id' => 6,  'personal_id' => 'M004', 'vorname' => 'Thomas',  'nachname' => 'Hofer',   'email' => 'm004@demo.easytime.at', 'position' => 'Fahrlehrer',        'berechtigung' => 'Mitarbeiter',   'urlaubsanspruch' => 200, 'akt_wochen_std' => 40, 'klasse' => 'CE - Lastkraftwagen Anhänger'],
+        ['id' => 7,  'personal_id' => 'M005', 'vorname' => 'Julia',   'nachname' => 'Kern',    'email' => 'm005@demo.easytime.at', 'position' => 'Verwaltung',        'berechtigung' => 'Mitarbeiter',   'urlaubsanspruch' => 200, 'akt_wochen_std' => 38, 'klasse' => 'B - Personenkraftwagen'],
+        ['id' => 8,  'personal_id' => 'M006', 'vorname' => 'Markus',  'nachname' => 'Pichler', 'email' => 'm006@demo.easytime.at', 'position' => 'Fahrlehrer',        'berechtigung' => 'Mitarbeiter',   'urlaubsanspruch' => 200, 'akt_wochen_std' => 40, 'klasse' => 'B - Personenkraftwagen'],
+        ['id' => 9,  'personal_id' => 'M007', 'vorname' => 'Eva',     'nachname' => 'Schuster','email' => 'm007@demo.easytime.at', 'position' => 'Fahrlehrerin',      'berechtigung' => 'Mitarbeiter',   'urlaubsanspruch' => 200, 'akt_wochen_std' => 38, 'klasse' => 'B - Personenkraftwagen'],
+        ['id' => 10, 'personal_id' => 'M008', 'vorname' => 'Daniel',  'nachname' => 'Fuchs',   'email' => 'm008@demo.easytime.at', 'position' => 'Fahrlehrer',        'berechtigung' => 'Mitarbeiter',   'urlaubsanspruch' => 200, 'akt_wochen_std' => 40, 'klasse' => 'D - Autobus'],
+        ['id' => 11, 'personal_id' => 'M009', 'vorname' => 'Laura',   'nachname' => 'Brandl',  'email' => 'm009@demo.easytime.at', 'position' => 'Fahrlehrerin',      'berechtigung' => 'Mitarbeiter',   'urlaubsanspruch' => 200, 'akt_wochen_std' => 38, 'klasse' => 'A - Motorrad'],
+        ['id' => 12, 'personal_id' => 'M010', 'vorname' => 'Michael', 'nachname' => 'Ortner',  'email' => 'm010@demo.easytime.at', 'position' => 'Fahrlehrer',        'berechtigung' => 'Mitarbeiter',   'urlaubsanspruch' => 200, 'akt_wochen_std' => 40, 'klasse' => 'B - Personenkraftwagen'],
     ];
 
     public static function credentialsHelp(): string {
-        return <<<'TEXT'
-Test-Zugänge (unverändert nach jedem Reseed):
-  Administrator: admin@firma.at  /  admin   (auch Personal-ID: A001)
-  Mitarbeiter:   lisa@firma.at   /  password (Personal-ID: M002)
-  Mitarbeiter:   tom@firma.at    /  password (Personal-ID: M003)
-TEXT;
+        $lines = [
+            'Test-Zugänge (Personal-ID oder E-Mail, Passwort für alle: ' . self::DEMO_PASSWORD . ')',
+            '',
+            'Administratoren:',
+            '  A001  Stefan Reich   (a001@demo.easytime.at)',
+            '  A002  Maria Höll     (a002@demo.easytime.at)',
+            '',
+            'Mitarbeiter:',
+        ];
+        foreach (self::USERS as $user) {
+            if (($user['berechtigung'] ?? '') !== 'Mitarbeiter') {
+                continue;
+            }
+            $lines[] = sprintf(
+                '  %s  %s %s  (%s)',
+                $user['personal_id'],
+                $user['vorname'],
+                $user['nachname'],
+                $user['email']
+            );
+        }
+        return implode("\n", $lines);
     }
 
     public static function seedFreshDatabase(PDO $db): void {
-        self::ensurePreservedUsers($db);
+        self::seedUsers($db);
         self::seedDemoData($db);
     }
 
     public static function resetAndSeed(PDO $db): void {
-        if (Database::isMysql()) {
-            throw new \RuntimeException(
-                'db:seed unterstützt nur SQLite (lokal ohne DB_DRIVER=mysql). Für MariaDB: migrate-Profil nutzen.'
-            );
-        }
-
-        self::clearDemoData($db);
-        self::ensurePreservedUsers($db);
+        self::clearAllData($db);
+        self::seedUsers($db);
         self::seedDemoData($db);
-        self::resetSqliteSequences($db);
+        self::resetAutoIncrement($db);
     }
 
-    private static function clearDemoData(PDO $db): void {
-        $db->exec('PRAGMA foreign_keys = OFF');
-
+    private static function clearAllData(PDO $db): void {
         $tables = [
+            'notifications',
+            'urlaub_ereignis',
             'urlaub_kommentar',
             'urlaub_event',
             'urlaub',
@@ -104,61 +91,96 @@ TEXT;
             'standorte',
             'taetigkeitsart',
             'app_settings',
+            'mitarbeiter',
         ];
 
-        foreach ($tables as $table) {
-            $db->exec("DELETE FROM {$table}");
+        if (Database::isMysql()) {
+            $db->exec('SET FOREIGN_KEY_CHECKS = 0');
+            foreach ($tables as $table) {
+                if (!self::tableExists($db, $table)) {
+                    continue;
+                }
+                $db->exec("TRUNCATE TABLE `{$table}`");
+            }
+            $db->exec('SET FOREIGN_KEY_CHECKS = 1');
+            return;
         }
 
-        $ids = implode(',', self::PRESERVED_USER_IDS);
-        $db->exec("DELETE FROM mitarbeiter WHERE id NOT IN ({$ids})");
-
+        $db->exec('PRAGMA foreign_keys = OFF');
+        foreach ($tables as $table) {
+            if (!self::tableExists($db, $table)) {
+                continue;
+            }
+            $db->exec("DELETE FROM {$table}");
+        }
         $db->exec('PRAGMA foreign_keys = ON');
     }
 
-    private static function ensurePreservedUsers(PDO $db): void {
-        $stmt = $db->prepare("
-            INSERT OR REPLACE INTO mitarbeiter (
-                id, personal_id, vorname, nachname, email, position, status,
-                password, berechtigung, urlaubsanspruch, akt_wochen_std
-            ) VALUES (
-                :id, :personal_id, :vorname, :nachname, :email, :position, 0,
-                :password, :berechtigung, :urlaubsanspruch, :akt_wochen_std
-            )
-        ");
+    private static function tableExists(PDO $db, string $table): bool {
+        if (Database::isMysql()) {
+            $stmt = $db->prepare("
+                SELECT COUNT(*) FROM information_schema.tables
+                WHERE table_schema = DATABASE() AND table_name = ?
+            ");
+            $stmt->execute([$table]);
+            return (int) $stmt->fetchColumn() > 0;
+        }
 
-        foreach (self::PRESERVED_USERS as $user) {
-            $stmt->execute($user);
+        $stmt = $db->prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?");
+        $stmt->execute([$table]);
+        return (bool) $stmt->fetchColumn();
+    }
+
+    private static function seedUsers(PDO $db): void {
+        if (Database::isMysql()) {
+            $stmt = $db->prepare("
+                INSERT INTO mitarbeiter (
+                    id, personal_id, vorname, nachname, email, position, status,
+                    password, berechtigung, urlaubsanspruch, akt_wochen_std
+                ) VALUES (
+                    :id, :personal_id, :vorname, :nachname, :email, :position, 0,
+                    :password, :berechtigung, :urlaubsanspruch, :akt_wochen_std
+                )
+            ");
+        } else {
+            $stmt = $db->prepare("
+                INSERT OR REPLACE INTO mitarbeiter (
+                    id, personal_id, vorname, nachname, email, position, status,
+                    password, berechtigung, urlaubsanspruch, akt_wochen_std
+                ) VALUES (
+                    :id, :personal_id, :vorname, :nachname, :email, :position, 0,
+                    :password, :berechtigung, :urlaubsanspruch, :akt_wochen_std
+                )
+            ");
+        }
+
+        foreach (self::USERS as $user) {
+            $stmt->execute([
+                'id'              => $user['id'],
+                'personal_id'     => $user['personal_id'],
+                'vorname'         => $user['vorname'],
+                'nachname'        => $user['nachname'],
+                'email'           => $user['email'],
+                'position'        => $user['position'],
+                'password'        => self::DEMO_PASSWORD,
+                'berechtigung'    => $user['berechtigung'],
+                'urlaubsanspruch' => $user['urlaubsanspruch'],
+                'akt_wochen_std'  => $user['akt_wochen_std'],
+            ]);
         }
     }
 
     private static function seedDemoData(PDO $db): void {
-        $today      = new \DateTimeImmutable('today');
-        $in10       = $today->modify('+10 days')->format('Y-m-d');
-        $in14       = $today->modify('+14 days')->format('Y-m-d');
-        $in20       = $today->modify('+20 days')->format('Y-m-d');
-        $in22       = $today->modify('+22 days')->format('Y-m-d');
-        $in12       = $today->modify('+12 days')->format('Y-m-d');
-        $yesterday  = $today->modify('-1 day')->format('Y-m-d');
-        $twoDaysAgo = $today->modify('-2 days')->format('Y-m-d');
-        $yearStart  = $today->format('Y') . '-01-01';
-        $nextMonth  = $today->modify('+1 month')->format('Y-m-d');
-        $nextMonthEnd = $today->modify('+1 month +2 days')->format('Y-m-d');
+        $today = new \DateTimeImmutable('today');
+        $d = static fn (string $modifier): string => $today->modify($modifier)->format('Y-m-d');
+        $yearStart = $today->format('Y') . '-01-01';
 
-        $db->exec("
-            INSERT INTO klassen (id, klasse, mitarbeiter_id) VALUES
-            (1, 'A - Motorrad', 1),
-            (2, 'B - Personenkraftwagen', 1),
-            (3, 'C - Lastkraftwagen', 1),
-            (4, 'CE - Lastkraftwagen Anhänger', 1),
-            (5, 'D - Autobus', 1),
-            (6, 'EzB - Personenkraftwagen Anhänger', 1),
-            (7, 'F - Traktor', 1),
-            (8, 'L17-Schulung', 1),
-            (9, 'Perfektionsfahrten', 1),
-            (10, 'B - Personenkraftwagen', 2),
-            (11, 'A - Motorrad', 3)
-        ");
+        $classId = 1;
+        foreach (self::USERS as $user) {
+            $db->prepare('INSERT INTO klassen (id, klasse, mitarbeiter_id) VALUES (?, ?, ?)')
+                ->execute([$classId, $user['klasse'], $user['id']]);
+            $classId++;
+        }
 
         $db->exec("
             INSERT INTO standorte (id, ort, kostenstelle, strasse, hausnummer, plz) VALUES
@@ -172,10 +194,10 @@ TEXT;
 
         $db->exec("
             INSERT INTO standort_vertretung (id, standort_id, vertreter_id, prioritaet) VALUES
-            (1, 1, 2, 1), (2, 1, 3, 2),
-            (3, 2, 1, 1), (4, 2, 3, 2),
-            (5, 3, 2, 1), (6, 3, 1, 2),
-            (7, 4, 3, 1), (8, 5, 2, 1), (9, 6, 1, 1)
+            (1, 1, 3, 1), (2, 1, 4, 2),
+            (3, 2, 5, 1), (4, 2, 6, 2),
+            (5, 3, 7, 1), (6, 3, 8, 2),
+            (7, 4, 9, 1), (8, 5, 10, 1), (9, 6, 11, 1)
         ");
 
         $db->exec("
@@ -184,76 +206,168 @@ TEXT;
             (5, 'krank'), (6, 'feiertag'), (7, 'urlaub')
         ");
 
-        $db->exec("
+        $eintrittRows = [
+            [1, 1, '2018-01-15', 40, 8, 'KV Admin', 0],
+            [2, 2, '2019-03-01', 40, 7, 'KV Admin', 0],
+            [3, 3, '2021-04-12', 38, 5, 'KV Fahrlehrer', 5],
+            [4, 4, '2020-09-01', 40, 6, 'KV Fahrlehrer', 3],
+            [5, 5, '2022-01-10', 38, 4, 'KV Fahrlehrer', 2],
+            [6, 6, '2019-11-20', 40, 6, 'KV Fahrlehrer', 4],
+            [7, 7, '2023-02-01', 38, 3, 'KV Büro', 0],
+            [8, 8, '2020-06-15', 40, 6, 'KV Fahrlehrer', 1],
+            [9, 9, '2021-08-23', 38, 5, 'KV Fahrlehrer', 6],
+            [10, 10, '2018-12-03', 40, 7, 'KV Fahrlehrer', 2],
+            [11, 11, '2022-07-11', 38, 4, 'KV Fahrlehrer', 0],
+            [12, 12, '2023-09-18', 40, 3, 'KV Fahrlehrer', 0],
+        ];
+        $eintrittStmt = $db->prepare('
             INSERT INTO eintritt (id, mitarbeiter_id, eintrittsdatum, std_woche, berufsjahr, einstufung, offener_urlaub)
-            VALUES
-            (1, 1, '2020-01-01', 40, 6, 'KV Admin', 0),
-            (2, 2, '2022-03-01', 38, 4, 'KV Büro', 10),
-            (3, 3, '2021-06-15', 40, 5, 'KV Büro', 8)
-        ");
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ');
+        foreach ($eintrittRows as $row) {
+            $eintrittStmt->execute($row);
+        }
 
         $db->exec("
             INSERT INTO mitarbeiter_standorte (mitarbeiter_id, standort_id, basis) VALUES
-            (1, 1, 1), (2, 1, 1), (2, 2, 0), (3, 3, 1), (3, 1, 0)
+            (1, 1, 1), (2, 1, 1), (3, 1, 1), (4, 2, 1), (5, 3, 1),
+            (6, 1, 1), (7, 6, 1), (8, 2, 1), (9, 3, 1), (10, 4, 1),
+            (11, 5, 1), (12, 1, 1)
         ");
 
-        $eventStmt = $db->prepare("
+        $db->prepare("
             INSERT INTO event (id, standort_id, start, ende, titel, bemerkung, klassen, urlaub_akzeptabel, in_urlaub, eventtyp, status)
-            VALUES (1, 1, ?, ?, 'Team-Schulung', 'Interne Abstimmung', 'B - Personenkraftwagen', 1, 0, 'Theorie', 0)
-        ");
-        $eventStmt->execute([$in12, $in12]);
+            VALUES (1, 1, ?, ?, 'Team-Schulung Fahrlehrer', 'Interne Abstimmung Q3', 'B - Personenkraftwagen', 1, 0, 'Theorie', 0)
+        ")->execute([$d('+12 days'), $d('+12 days')]);
 
-        $urlaubStmt = $db->prepare("
+        $vacations = [
+            ['id' => 1,  'user' => 3,  'start' => $d('+10 days'), 'end' => $d('+14 days'), 'days' => 5, 'flag' => 0, 'events' => ['created']],
+            ['id' => 2,  'user' => 4,  'start' => $d('+20 days'), 'end' => $d('+24 days'), 'days' => 5, 'flag' => 1, 'events' => ['created', 'approved']],
+            ['id' => 3,  'user' => 5,  'start' => $d('+30 days'), 'end' => $d('+34 days'), 'days' => 5, 'flag' => 3, 'events' => ['created', 'approved', 'storno_requested']],
+            ['id' => 4,  'user' => 6,  'start' => $d('+7 days'),  'end' => $d('+9 days'),  'days' => 3, 'flag' => 0, 'events' => ['created']],
+            ['id' => 5,  'user' => 7,  'start' => $d('-20 days'), 'end' => $d('-16 days'), 'days' => 5, 'flag' => 1, 'events' => ['created', 'approved']],
+            ['id' => 6,  'user' => 8,  'start' => $d('+45 days'), 'end' => $d('+48 days'), 'days' => 4, 'flag' => 2, 'events' => ['created', 'rejected']],
+            ['id' => 7,  'user' => 9,  'start' => $d('+55 days'), 'end' => $d('+59 days'), 'days' => 5, 'flag' => 1, 'events' => ['created', 'approved']],
+            ['id' => 8,  'user' => 10, 'start' => $d('-40 days'), 'end' => $d('-37 days'), 'days' => 4, 'flag' => 4, 'events' => ['created', 'approved', 'cancelled']],
+            ['id' => 9,  'user' => 11, 'start' => $d('+70 days'), 'end' => $d('+74 days'), 'days' => 5, 'flag' => 1, 'events' => ['created', 'approved']],
+            ['id' => 10, 'user' => 12, 'start' => $d('+3 days'),  'end' => $d('+5 days'),  'days' => 3, 'flag' => 0, 'events' => ['created']],
+            ['id' => 11, 'user' => 4,  'start' => $d('-10 days'), 'end' => $d('-8 days'),  'days' => 3, 'flag' => 1, 'events' => ['created', 'approved']],
+        ];
+
+        $vacStmt = $db->prepare('
             INSERT INTO urlaub (id, mitarbeiter_id, beginn, ende, tage_im_urlaub, beginn_in_worten, ende_in_worten, vertretung_id, buero, buero_vertretung_id, genehmigt)
-            VALUES
-            (1, 2, ?, ?, 5, 'in Kürze', 'in Kürze', NULL, 1, NULL, 0),
-            (2, 3, ?, ?, 3, 'in Kürze', 'in Kürze', 1, 1, 1, 1),
-            (3, 2, ?, ?, 3, 'geplant', 'geplant', 3, 1, NULL, 3)
-        ");
-        $urlaubStmt->execute([$in10, $in14, $in20, $in22, $nextMonth, $nextMonthEnd]);
+            VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 1, NULL, ?)
+        ');
+        foreach ($vacations as $vac) {
+            $vacStmt->execute([
+                $vac['id'],
+                $vac['user'],
+                $vac['start'],
+                $vac['end'],
+                $vac['days'],
+                'Demo',
+                'Demo',
+                $vac['flag'],
+            ]);
+        }
 
-        $db->exec("
-            INSERT INTO urlaubssperre (id, von, bis, ganzjaehrig) VALUES
-            (1, '2025-12-24', '2026-01-06', 0)
-        ");
+        $db->exec('INSERT INTO urlaub_event (id, event_id, urlaub_id) VALUES (1, 1, 2)');
+        $db->exec("INSERT INTO urlaubssperre (id, von, bis, ganzjaehrig) VALUES (1, '2025-12-24', '2026-01-06', 0)");
 
-        $db->exec("INSERT INTO urlaub_event (id, event_id, urlaub_id) VALUES (1, 1, 2)");
-
-        $taetStmt = $db->prepare("
+        $taetStmt = $db->prepare('
             INSERT INTO taetigkeit (id, datum, mitarbeiter_id, taetigkeitsart_id, stunden)
-            VALUES
-            (1, ?, 2, 1, 7.5),
-            (2, ?, 3, 3, 8.0),
-            (3, ?, 2, 1, 6.0)
-        ");
-        $taetStmt->execute([$yesterday, $yesterday, $twoDaysAgo]);
+            VALUES (?, ?, ?, 1, ?)
+        ');
+        $taetStmt->execute([1, $d('-1 day'), 3, 7.5]);
+        $taetStmt->execute([2, $d('-1 day'), 4, 8.0]);
+        $taetStmt->execute([3, $d('-2 days'), 5, 6.0]);
+        $taetStmt->execute([4, $d('-3 days'), 8, 7.0]);
 
-        $ueberStmt = $db->prepare("
+        $ueberStmt = $db->prepare('
             INSERT INTO uebertrag (mitarbeiter_id, datum, uebertrag_urlaub, uebertrag_ueberstunden, ang_wochen_std, monats_soll)
-            VALUES (2, ?, 2.5, 4.0, 38.0, 152.0), (3, ?, 1.0, 2.0, 40.0, 160.0)
-        ");
-        $ueberStmt->execute([$yearStart, $yearStart]);
+            VALUES (?, ?, ?, ?, ?, ?)
+        ');
+        $ueberData = [
+            [3, 2.5, 4.0, 38.0, 152.0],
+            [4, 1.0, 2.0, 40.0, 160.0],
+            [5, 3.0, 1.5, 38.0, 152.0],
+            [7, 0.5, 6.0, 38.0, 152.0],
+            [9, 2.0, 3.5, 38.0, 152.0],
+        ];
+        foreach ($ueberData as [$uid, $urlaub, $ueStd, $wochen, $soll]) {
+            $ueberStmt->execute([$uid, $yearStart, $urlaub, $ueStd, $wochen, $soll]);
+        }
 
-        $zuschStmt = $db->prepare("
+        $db->prepare('
             INSERT INTO zuschlag (mitarbeiter_id, datum, gr10_pro_tag, wochenende, nacht, A, C, E, F, D, theorie)
-            VALUES (2, ?, 0.5, 0, 0, 0, 0, 0, 0, 0, 0.25)
-        ");
-        $zuschStmt->execute([$twoDaysAgo]);
+            VALUES (?, ?, 0.5, 0, 0, 0, 0, 0, 0, 0, 0.25)
+        ')->execute([4, $d('-2 days')]);
 
-        $db->exec("INSERT OR IGNORE INTO app_settings (key, value) VALUES ('min_staff_available', '1')");
-        $db->exec("INSERT OR IGNORE INTO app_settings (key, value) VALUES ('max_fenstertage', '0')");
+        if (Database::isMysql()) {
+            $db->exec("INSERT IGNORE INTO app_settings (`key`, `value`) VALUES ('min_staff_available', '1'), ('max_fenstertage', '0')");
+        } else {
+            $db->exec("INSERT OR IGNORE INTO app_settings (key, value) VALUES ('min_staff_available', '1'), ('max_fenstertage', '0')");
+        }
+
+        if (self::tableExists($db, 'urlaub_ereignis')) {
+            foreach ($vacations as $vac) {
+                $actor = $vac['user'];
+                foreach ($vac['events'] as $eventType) {
+                    $eventActor = in_array($eventType, ['approved', 'rejected', 'cancelled'], true) ? 1 : $actor;
+                    RequestEvent::log((int) $vac['id'], $eventActor, $eventType);
+                }
+            }
+        }
+
+        if (self::tableExists($db, 'notifications')) {
+            Notification::create(1, 'Offene Urlaubsanträge', '3 neue Anträge warten auf Freigabe.', 'approval', [
+                'type' => Inbox::TYPE_TASK,
+                'resolution_mode' => Inbox::RESOLUTION_SHARED,
+                'thread_id' => 'vacation-approval',
+                'action_url' => '/?tab=operations',
+            ]);
+            Notification::create(3, 'Urlaub beantragt', 'Dein Antrag vom ' . $d('+10 days') . ' wurde eingereicht.', 'info');
+            Notification::create(5, 'Storno beantragt', 'Dein Storno für ' . $d('+30 days') . ' wird geprüft.', 'info');
+            Notification::create(8, 'Antrag abgelehnt', 'Dein Urlaub ' . $d('+45 days') . ' wurde abgelehnt.', 'rejected');
+        }
     }
 
-    private static function resetSqliteSequences(PDO $db): void {
+    private static function resetAutoIncrement(PDO $db): void {
+        if (Database::isMysql()) {
+            $tables = [
+                'mitarbeiter' => 12,
+                'klassen' => 12,
+                'standorte' => 6,
+                'standort_vertretung' => 9,
+                'eintritt' => 12,
+                'taetigkeitsart' => 7,
+                'event' => 1,
+                'urlaub' => 11,
+                'urlaubssperre' => 1,
+                'urlaub_event' => 1,
+                'taetigkeit' => 4,
+            ];
+            foreach ($tables as $table => $maxId) {
+                if (!self::tableExists($db, $table)) {
+                    continue;
+                }
+                $db->exec("ALTER TABLE `{$table}` AUTO_INCREMENT = " . ($maxId + 1));
+            }
+            return;
+        }
+
         $tables = [
             'klassen', 'standorte', 'standort_vertretung', 'eintritt', 'event',
             'urlaub', 'urlaubssperre', 'urlaub_event', 'taetigkeit', 'taetigkeitsart',
         ];
         foreach ($tables as $table) {
+            if (!self::tableExists($db, $table)) {
+                continue;
+            }
             $max = (int) $db->query("SELECT COALESCE(MAX(id), 0) FROM {$table}")->fetchColumn();
-            $db->exec("DELETE FROM sqlite_sequence WHERE name = " . $db->quote($table));
+            $db->exec('DELETE FROM sqlite_sequence WHERE name = ' . $db->quote($table));
             if ($max > 0) {
-                $db->exec("INSERT INTO sqlite_sequence (name, seq) VALUES (" . $db->quote($table) . ", {$max})");
+                $db->exec('INSERT INTO sqlite_sequence (name, seq) VALUES (' . $db->quote($table) . ", {$max})");
             }
         }
     }
