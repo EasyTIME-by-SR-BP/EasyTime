@@ -34,6 +34,10 @@ $currentFilterLabel = $filterLabels[$inboxFilter] ?? $filterLabels['all'];
 $currentFilterCount = (int) ($inboxCounts[$inboxFilter] ?? count($notificationList ?? []));
 ?>
 <div class="w-full max-w-none">
+    <?php
+        $isAdmin = in_array($currentRole ?? '', ['CEO', 'Admin'], true);
+        include __DIR__ . '/mobile-inbox-filters.php';
+    ?>
     <div class="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
             <h2 class="text-xs font-bold uppercase tracking-[0.2em] text-emerald-500 mb-2"><?= I18n::get('inbox.title') ?></h2>

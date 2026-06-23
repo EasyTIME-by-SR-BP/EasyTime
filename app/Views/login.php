@@ -2,12 +2,24 @@
 use App\Core\I18n;
 
 $isForgot = isset($_GET['forgot']);
+$loginError = isset($_GET['error']) ? (string) $_GET['error'] : '';
+$loginSuccess = isset($_GET['success']) ? (string) $_GET['success'] : '';
+
+$loginErrorMessage = match ($loginError) {
+    'login_failed' => I18n::get('login.invalid_credentials'),
+    default => $loginError !== '' ? I18n::get('msg.generic_error') : '',
+};
+
+$loginSuccessMessage = match ($loginSuccess) {
+    'password_reset_requested' => I18n::get('msg.password_reset_requested'),
+    default => '',
+};
 ?>
 <!DOCTYPE html>
 <html lang="<?= $_SESSION['lang'] ?? 'de' ?>" class="antialiased h-full">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>EasyTime | <?= I18n::get('login.welcome') ?></title>
     <link rel="icon" type="image/svg+xml" href="/assets/icons/urlaubsplaner_icon.svg">
     <script>
@@ -115,7 +127,7 @@ $isForgot = isset($_GET['forgot']);
 </head>
 <body class="h-full bg-yellow-50 text-emerald-950 flex relative">
     <!-- Language Toggle -->
-    <div class="absolute top-4 right-4 z-50 flex gap-2 bg-white/70 backdrop-blur px-3 py-1.5 rounded-full border border-yellow-200 shadow-sm">
+    <div class="absolute top-[max(1rem,env(safe-area-inset-top))] right-[max(1rem,env(safe-area-inset-right))] z-50 flex gap-2 bg-white/70 backdrop-blur px-3 py-1.5 rounded-full border border-yellow-200 shadow-sm">
         <a href="?lang=en" class="<?= ($_SESSION['lang'] ?? 'de') === 'en' ? 'font-bold text-lime-600' : 'text-emerald-600' ?>">EN</a>
         <span class="text-emerald-300">|</span>
         <a href="?lang=de" class="<?= ($_SESSION['lang'] ?? 'de') === 'de' ? 'font-bold text-lime-600' : 'text-emerald-600' ?>">DE</a>
@@ -139,8 +151,8 @@ $isForgot = isset($_GET['forgot']);
     </div>
 
     <!-- Right Side: Login Form -->
-    <div class="w-full lg:w-1/2 flex items-center justify-center p-8 bg-yellow-50 relative">
-        <div class="max-w-md w-full space-y-8 bg-white p-10 rounded-3xl shadow-xl shadow-lime-900/5 relative z-10 border border-yellow-100/50">
+    <div class="w-full lg:w-1/2 flex items-center justify-center p-4 sm:p-8 pt-16 sm:pt-8 pb-[max(1.5rem,env(safe-area-inset-bottom))] bg-yellow-50 relative min-h-screen">
+        <div class="max-w-md w-full space-y-6 sm:space-y-8 bg-white p-6 sm:p-10 rounded-3xl shadow-xl shadow-lime-900/5 relative z-10 border border-yellow-100/50">
             <div class="text-center">
                 <img src="/assets/icons/urlaubsplaner_icon.svg" alt="Urlaubsplaner" class="mx-auto mb-6 h-16 w-16 rounded-2xl shadow-lg shadow-lime-400/30">
                 <h2 class="text-3xl font-bold text-emerald-900 tracking-tight">Easy<span class="text-lime-600">Time</span></h2>
@@ -151,27 +163,15 @@ $isForgot = isset($_GET['forgot']);
                 <?php endif; ?>
             </div>
 
-            <?php if (isset($_GET['error']) && $_GET['error'] === 'login_failed'): ?>
-                <div class="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-xl text-center font-medium">
-                    <?= I18n::get('login.invalid_credentials') ?>
-                </div>
-            <?php endif; ?>
-            
-            <?php if (isset($_GET['error']) && $_GET['error'] === 'invalid_token'): ?>
-                <div class="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-xl text-center font-medium">
-                    <?= I18n::get('msg.invalid_token') ?>
+            <?php if ($loginErrorMessage !== ''): ?>
+                <div class="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium leading-snug text-red-800" role="alert">
+                    <?= htmlspecialchars($loginErrorMessage) ?>
                 </div>
             <?php endif; ?>
 
-            <?php if (isset($_GET['success'])): ?>
-                <div class="bg-lime-50 border border-lime-200 text-lime-700 text-sm px-4 py-3 rounded-xl text-center font-medium">
-                    <?php
-                        if ($_GET['success'] === 'password_reset_requested') {
-                            echo I18n::get('msg.password_reset_requested');
-                        } elseif ($_GET['success'] === 'action_success') {
-                            echo I18n::get('msg.action_success');
-                        }
-                    ?>
+            <?php if ($loginSuccessMessage !== ''): ?>
+                <div class="mt-6 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium leading-snug text-green-800" role="status">
+                    <?= htmlspecialchars($loginSuccessMessage) ?>
                 </div>
             <?php endif; ?>
 
@@ -240,6 +240,16 @@ $isForgot = isset($_GET['forgot']);
                 input.type = 'password';
             }
         }
+
+        (function cleanLoginQueryParams() {
+            const params = new URLSearchParams(window.location.search);
+            if (!params.has('error') && !params.has('success')) return;
+            params.delete('error');
+            params.delete('success');
+            const query = params.toString();
+            const nextUrl = window.location.pathname + (query ? '?' + query : '') + window.location.hash;
+            window.history.replaceState({}, '', nextUrl);
+        })();
     </script>
 </body>
 </html>

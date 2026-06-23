@@ -212,7 +212,35 @@ class User {
         $stmt->execute([$employeeId, $today, $overtimeHours]);
     }
 
-    public static function createEmployee($firstname, $lastname, $email, $mnr, $password, $role = 'Employee', $departmentId = null, $customColor = null, $vacationDays = 25, $overtimeHours = 0) {
+    public static function setMustChangePassword(int $userId, bool $mustChange): void {
+        $key = 'must_change_pw_' . $userId;
+        if ($mustChange) {
+            \App\Core\Database::upsertAppSetting($key, '1');
+            return;
+        }
+        $db = Database::getConnection();
+        $key = 'must_change_pw_' . $userId;
+        if (Database::isMysql()) {
+            $stmt = $db->prepare('DELETE FROM app_settings WHERE `key` = ?');
+        } else {
+            $stmt = $db->prepare('DELETE FROM app_settings WHERE key = ?');
+        }
+        $stmt->execute([$key]);
+    }
+
+    public static function mustChangePassword(int $userId): bool {
+        $db = Database::getConnection();
+        $key = 'must_change_pw_' . $userId;
+        if (Database::isMysql()) {
+            $stmt = $db->prepare('SELECT value FROM app_settings WHERE `key` = ? LIMIT 1');
+        } else {
+            $stmt = $db->prepare('SELECT value FROM app_settings WHERE key = ? LIMIT 1');
+        }
+        $stmt->execute([$key]);
+        return (string) $stmt->fetchColumn() === '1';
+    }
+
+    public static function createEmployee($firstname, $lastname, $email, $mnr, $password, $role = 'Employee', $departmentId = null, $customColor = null, $vacationDays = 25, $overtimeHours = 0, $mustChangePassword = false) {
         $db = Database::getConnection();
         $staffId = self::normalizeStaffIdentifier((string) $mnr);
         if ($staffId === '') {
@@ -245,9 +273,12 @@ class User {
 
             self::upsertClassForEmployee($employeeId, $className);
             self::upsertOvertime($employeeId, (float) $overtimeHours);
+            if ($mustChangePassword) {
+                self::setMustChangePassword($employeeId, true);
+            }
 
             $db->commit();
-            return true;
+            return $employeeId;
         } catch (\Exception $e) {
             if ($db->inTransaction()) {
                 $db->rollBack();
@@ -337,7 +368,11 @@ class User {
     public static function updatePassword($userId, $newPassword, $clearMustChange = false) {
         $db = Database::getConnection();
         $stmt = $db->prepare("UPDATE mitarbeiter SET password = ? WHERE id = ?");
-        return $stmt->execute([$newPassword, (int) $userId]);
+        $ok = $stmt->execute([$newPassword, (int) $userId]);
+        if ($ok && $clearMustChange) {
+            self::setMustChangePassword((int) $userId, false);
+        }
+        return $ok;
     }
 
     public static function generateResetToken($email) {

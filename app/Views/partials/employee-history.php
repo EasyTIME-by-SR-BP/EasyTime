@@ -15,6 +15,11 @@ $eventLabels = [
     'storno_withdrawn' => I18n::get('history.event.storno_withdrawn'),
     'cancelled'        => I18n::get('history.event.cancelled'),
     'updated'          => I18n::get('history.event.updated'),
+    'change_requested' => I18n::get('history.event.change_requested'),
+    'change_withdrawn' => I18n::get('history.event.change_withdrawn'),
+    'change_approved'  => I18n::get('history.event.change_approved'),
+    'change_rejected'  => I18n::get('history.event.change_rejected'),
+    'dates_adjusted'   => I18n::get('history.event.dates_adjusted'),
 ];
 
 $statusLabels = [
@@ -22,10 +27,11 @@ $statusLabels = [
     'rejected'         => I18n::get('emp.status_rejected'),
     'pending'          => I18n::get('emp.status_pending'),
     'storno_requested' => I18n::get('emp.status_storno_requested'),
+    'change_requested' => I18n::get('emp.status_change_requested'),
     'cancelled'        => I18n::get('emp.status_cancelled'),
 ];
 
-$openStatuses = ['pending', 'storno_requested'];
+$openStatuses = ['pending', 'storno_requested', 'change_requested'];
 $todayYmd = date('Y-m-d');
 
 $historyPayload = [];
@@ -49,6 +55,9 @@ foreach ($requests as $req) {
         'start_date' => $req['start_date'],
         'end_date' => $req['end_date'],
         'net_days' => (int) $req['net_days'],
+        'wunsch_start_date' => $req['wunsch_start_date'] ?? null,
+        'wunsch_end_date' => $req['wunsch_end_date'] ?? null,
+        'wunsch_net_days' => $req['wunsch_net_days'] ?? null,
         'status' => $req['status'],
         'status_label' => $statusLabels[$req['status']] ?? $req['status'],
         'is_open' => $isOpen,
@@ -102,106 +111,12 @@ $sectionPast = I18n::get('history.section.past');
                 <option value="approved"><?= I18n::get('emp.status_approved') ?></option>
                 <option value="rejected"><?= I18n::get('emp.status_rejected') ?></option>
                 <option value="storno_requested"><?= I18n::get('emp.status_storno_requested') ?></option>
+                <option value="change_requested"><?= I18n::get('emp.status_change_requested') ?></option>
                 <option value="cancelled"><?= I18n::get('emp.status_cancelled') ?></option>
             </select>
         </div>
 
-        <template x-if="openItems.length > 0">
-            <div class="mb-8">
-                <h3 class="text-xs font-bold uppercase tracking-[0.2em] text-[#E8007D] mb-4"><?= htmlspecialchars($sectionOpen) ?></h3>
-                <div class="space-y-3">
-                    <template x-for="item in openItems" :key="'open-' + item.id">
-                        <button
-                            type="button"
-                            @click="openDetail(item.id)"
-                            class="w-full text-left rounded-2xl border border-lime-100 bg-white p-4 sm:p-5 transition-all hover:border-lime-300 hover:shadow-sm"
-                        >
-                            <div class="flex flex-wrap items-start justify-between gap-3">
-                                <div class="space-y-2 min-w-0">
-                                    <div class="text-xs font-bold uppercase tracking-[0.2em] text-emerald-500">
-                                        Antrag #<span x-text="item.id"></span>
-                                    </div>
-                                    <div class="text-xl font-bold text-emerald-900 leading-tight" x-text="formatRange(item)"></div>
-                                    <div class="flex items-baseline gap-2 text-emerald-600">
-                                        <span class="text-2xl font-bold text-emerald-900 tabular-nums leading-none" x-text="item.net_days"></span>
-                                        <span class="text-sm font-medium"><?= I18n::get('emp.days') ?></span>
-                                    </div>
-                                </div>
-                                <span class="inline-flex px-3 py-1.5 rounded-full text-sm font-bold border shrink-0" :class="statusBadgeClass(item.status)" x-text="item.status_label"></span>
-                            </div>
-                        </button>
-                    </template>
-                </div>
-            </div>
-        </template>
-
-        <template x-if="plannedItems.length > 0">
-            <div class="mb-8">
-                <h3 class="text-xs font-bold uppercase tracking-[0.2em] text-emerald-500 mb-4"><?= htmlspecialchars($sectionPlanned) ?></h3>
-                <div class="space-y-3">
-                    <template x-for="item in plannedItems" :key="'planned-' + item.id">
-                        <button
-                            type="button"
-                            @click="openDetail(item.id)"
-                            class="w-full text-left rounded-2xl border border-green-200 bg-white p-4 sm:p-5 transition-all hover:border-green-300 hover:shadow-sm"
-                        >
-                            <div class="flex flex-wrap items-start justify-between gap-3">
-                                <div class="space-y-2 min-w-0">
-                                    <div class="text-xs font-bold uppercase tracking-[0.2em] text-emerald-500">
-                                        Antrag #<span x-text="item.id"></span>
-                                    </div>
-                                    <div class="text-xl font-bold text-emerald-900 leading-tight" x-text="formatRange(item)"></div>
-                                    <div class="flex items-baseline gap-2 text-emerald-600">
-                                        <span class="text-2xl font-bold text-emerald-900 tabular-nums leading-none" x-text="item.net_days"></span>
-                                        <span class="text-sm font-medium"><?= I18n::get('emp.days') ?></span>
-                                    </div>
-                                </div>
-                                <span class="inline-flex px-3 py-1.5 rounded-full text-sm font-bold border shrink-0" :class="statusBadgeClass(item.status)" x-text="item.status_label"></span>
-                            </div>
-                        </button>
-                    </template>
-                </div>
-            </div>
-        </template>
-
-        <template x-if="pastItems.length > 0">
-            <div>
-                <h3 class="text-xs font-bold uppercase tracking-[0.2em] text-emerald-500 mb-4" x-show="openItems.length > 0 || plannedItems.length > 0"><?= htmlspecialchars($sectionPast) ?></h3>
-                <div class="space-y-3">
-                    <template x-for="item in pastItems" :key="'past-' + item.id">
-                        <button
-                            type="button"
-                            @click="openDetail(item.id)"
-                            class="w-full text-left rounded-2xl border border-lime-100 bg-white p-4 sm:p-5 transition-all hover:border-lime-300 hover:shadow-sm"
-                        >
-                            <div class="flex flex-wrap items-start justify-between gap-3">
-                                <div class="space-y-2 min-w-0">
-                                    <div class="text-xs font-bold uppercase tracking-[0.2em] text-emerald-500">
-                                        Antrag #<span x-text="item.id"></span>
-                                    </div>
-                                    <div class="text-xl font-bold text-emerald-900 leading-tight" x-text="formatRange(item)"></div>
-                                    <div class="flex items-baseline gap-2 text-emerald-600">
-                                        <span class="text-2xl font-bold text-emerald-900 tabular-nums leading-none" x-text="item.net_days"></span>
-                                        <span class="text-sm font-medium"><?= I18n::get('emp.days') ?></span>
-                                    </div>
-                                </div>
-                                <span class="inline-flex px-3 py-1.5 rounded-full text-sm font-bold border shrink-0" :class="statusBadgeClass(item.status)" x-text="item.status_label"></span>
-                            </div>
-                        </button>
-                    </template>
-                </div>
-            </div>
-        </template>
-
-        <div x-show="openItems.length === 0 && plannedItems.length === 0 && pastItems.length === 0" class="relative overflow-hidden py-14 text-center">
-            <div class="pointer-events-none absolute -right-6 top-0 h-28 w-28 rounded-full bg-lime-100/80 blur-2xl" aria-hidden="true"></div>
-            <div class="relative mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-lime-50 to-emerald-50 text-emerald-500 shadow-inner">
-                <svg class="h-7 w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                </svg>
-            </div>
-            <p class="relative text-base font-bold text-emerald-900"><?= I18n::get('history.empty') ?></p>
-        </div>
+        <?php $showEmployeeName = false; include __DIR__ . '/history-list-sections.php'; ?>
     </div>
 
     <div
@@ -213,7 +128,7 @@ $sectionPast = I18n::get('history.section.past');
         x-transition:leave="transition ease-in duration-150"
         x-transition:leave-start="opacity-100"
         x-transition:leave-end="opacity-0"
-        class="fixed inset-0 z-[60] overflow-y-auto bg-[#fffdf2] lg:left-[4.5rem] lg:top-[4.5rem]"
+        class="fixed inset-0 z-[60] overflow-y-auto bg-[#fffdf2] history-detail-panel"
     >
         <template x-if="selected">
             <div class="w-full p-4 sm:p-6 lg:p-8">
@@ -242,33 +157,105 @@ $sectionPast = I18n::get('history.section.past');
                     <a href="/?tab=calendar" class="text-xs font-bold uppercase tracking-[0.15em] text-[#E8007D] hover:text-emerald-900 transition-colors"><?= I18n::get('history.open_calendar') ?></a>
                 </div>
 
-                <div class="flex flex-wrap gap-2 mb-8 pb-6 border-b border-lime-100">
+                <div class="space-y-4 mb-8 pb-6 border-b border-lime-100">
                     <template x-if="selected.status === 'pending'">
-                        <form method="POST" action="/?action=withdraw_request" class="inline">
-                            <input type="hidden" name="request_id" :value="selected.id">
-                            <button type="submit" class="text-red-600 hover:text-white hover:bg-red-500 border border-red-200 px-4 py-2 rounded-xl text-sm font-bold transition-colors">
-                                <?= I18n::get('emp.retract') ?>
-                            </button>
-                        </form>
-                    </template>
-                    <template x-if="selected.status === 'approved'">
-                        <form method="POST" action="/?action=request_storno" class="inline">
-                            <input type="hidden" name="request_id" :value="selected.id">
-                            <button type="submit" class="text-orange-600 hover:text-white hover:bg-orange-500 border border-orange-200 px-4 py-2 rounded-xl text-sm font-bold transition-colors">
-                                <?= I18n::get('emp.storno') ?>
-                            </button>
-                        </form>
+                        <section class="rounded-2xl border border-lime-100 bg-[#fffdf2]/40 p-4 space-y-3">
+                            <h4 class="text-xs font-bold uppercase tracking-[0.2em] text-[#E8007D]"><?= I18n::get('emp.action_section_retract') ?></h4>
+                            <form method="POST" action="/?action=withdraw_request">
+                                <input type="hidden" name="request_id" :value="selected.id">
+                                <button type="submit" class="w-full sm:w-auto text-red-600 hover:text-white hover:bg-red-500 border border-red-200 px-4 py-2 rounded-xl text-sm font-bold transition-colors">
+                                    <?= I18n::get('emp.retract') ?>
+                                </button>
+                            </form>
+                        </section>
                     </template>
                     <template x-if="selected.status === 'storno_requested'">
-                        <form method="POST" action="/?action=withdraw_storno" class="inline">
-                            <input type="hidden" name="request_id" :value="selected.id">
-                            <input type="hidden" name="return_tab" value="history">
-                            <button type="submit" class="et-btn-secondary px-4 py-2 rounded-xl text-sm font-bold transition-colors">
-                                <?= I18n::get('emp.cancel_storno') ?>
-                            </button>
-                        </form>
+                        <section class="rounded-2xl border border-orange-100 bg-[#fffdf2]/40 p-4 space-y-3">
+                            <h4 class="text-xs font-bold uppercase tracking-[0.2em] text-orange-600"><?= I18n::get('emp.action_section_withdraw_storno') ?></h4>
+                            <form method="POST" action="/?action=withdraw_storno">
+                                <input type="hidden" name="request_id" :value="selected.id">
+                                <input type="hidden" name="return_tab" value="history">
+                                <button type="submit" class="w-full sm:w-auto et-btn-secondary px-4 py-2 rounded-xl text-sm font-bold transition-colors">
+                                    <?= I18n::get('emp.cancel_storno') ?>
+                                </button>
+                            </form>
+                        </section>
+                    </template>
+                    <template x-if="selected.status === 'change_requested'">
+                        <section class="rounded-2xl border border-violet-100 bg-[#fffdf2]/40 p-4 space-y-3">
+                            <h4 class="text-xs font-bold uppercase tracking-[0.2em] text-violet-600"><?= I18n::get('emp.action_section_withdraw_change') ?></h4>
+                            <form method="POST" action="/?action=withdraw_change">
+                                <input type="hidden" name="request_id" :value="selected.id">
+                                <input type="hidden" name="return_tab" value="history">
+                                <button type="submit" class="w-full sm:w-auto et-btn-secondary px-4 py-2 rounded-xl text-sm font-bold transition-colors">
+                                    <?= I18n::get('emp.cancel_change') ?>
+                                </button>
+                            </form>
+                        </section>
                     </template>
                 </div>
+
+                <template x-if="selected.status === 'approved'">
+                    <div class="mb-8 pb-6 border-b border-lime-100 space-y-4">
+                        <div class="grid grid-cols-2 gap-2 calendar-action-mode-picker">
+                            <button
+                                type="button"
+                                @click="eventAction = 'change'"
+                                :class="eventAction === 'change' ? 'et-btn-primary' : 'et-btn-secondary'"
+                                class="py-2 rounded-xl text-sm font-bold"
+                            ><?= I18n::get('emp.action_section_change') ?></button>
+                            <button
+                                type="button"
+                                @click="eventAction = 'storno'"
+                                :class="eventAction === 'storno' ? 'et-btn-primary' : 'et-btn-secondary'"
+                                class="py-2 rounded-xl text-sm font-bold"
+                            ><?= I18n::get('emp.action_section_storno') ?></button>
+                        </div>
+
+                        <div x-show="eventAction === 'change'" x-cloak class="space-y-4">
+                            <form
+                                method="POST"
+                                action="/?action=request_change"
+                                class="employee-dates-form space-y-4"
+                                :data-original-start="selected.start_date"
+                                :data-original-end="selected.end_date"
+                                x-init="window.wireDatesChangeForm && window.wireDatesChangeForm($el)"
+                            >
+                                <input type="hidden" name="request_id" :value="selected.id">
+                                <input type="hidden" name="return_tab" value="history">
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div>
+                                        <label class="block text-sm font-semibold text-emerald-800 mb-1.5"><?= I18n::get('emp.start_date') ?></label>
+                                        <input type="date" name="new_start_date" :value="selected.start_date" required class="w-full bg-[#fffdf2] border border-lime-200 rounded-xl px-4 py-3 text-sm text-emerald-900 outline-none focus:ring-2 focus:ring-lime-400">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-semibold text-emerald-800 mb-1.5"><?= I18n::get('emp.end_date') ?></label>
+                                        <input type="date" name="new_end_date" :value="selected.end_date" required class="w-full bg-[#fffdf2] border border-lime-200 rounded-xl px-4 py-3 text-sm text-emerald-900 outline-none focus:ring-2 focus:ring-lime-400">
+                                    </div>
+                                </div>
+                                <div class="employee-dates-warning hidden rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium leading-snug text-amber-900" role="alert"><?= I18n::get('emp.dates_changed_panel') ?></div>
+                                <button type="submit" class="w-full et-btn-primary font-bold py-3 rounded-xl"><?= I18n::get('emp.request_change') ?></button>
+                            </form>
+                        </div>
+
+                        <div x-show="eventAction === 'storno'" x-cloak class="space-y-4">
+                            <form method="POST" action="/?action=request_storno" class="space-y-4">
+                                <input type="hidden" name="request_id" :value="selected.id">
+                                <input type="hidden" name="return_tab" value="history">
+                                <button type="submit" class="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl transition-colors">
+                                    <?= I18n::get('emp.storno') ?>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </template>
+
+                <template x-if="selected.status === 'change_requested' && selected.wunsch_start_date">
+                    <div class="mb-8 pb-6 border-b border-lime-100 rounded-xl border border-violet-100 bg-violet-50/50 p-4 text-sm text-emerald-800">
+                        <div class="text-xs font-bold uppercase tracking-[0.15em] text-violet-600 mb-1"><?= I18n::get('ceo.proposed_dates') ?></div>
+                        <div class="font-bold" x-text="formatRange({ start_date: selected.wunsch_start_date, end_date: selected.wunsch_end_date })"></div>
+                    </div>
+                </template>
 
                 <h4 class="text-xs font-bold uppercase tracking-[0.2em] text-[#E8007D] mb-4"><?= I18n::get('history.timeline') ?></h4>
                 <div class="space-y-4 mb-8">
@@ -301,6 +288,7 @@ function employeeHistory(requests, initialSelectedId) {
         search: '',
         statusFilter: 'all',
         selectedId: initialSelectedId,
+        eventAction: 'change',
         matchesFilters(item) {
             if (this.statusFilter === 'open' && !item.is_open) return false;
             if (this.statusFilter === 'planned' && !item.is_planned) return false;
@@ -334,6 +322,7 @@ function employeeHistory(requests, initialSelectedId) {
         },
         openDetail(id) {
             this.selectedId = id;
+            this.eventAction = 'change';
             const url = new URL(window.location.href);
             url.searchParams.set('tab', 'history');
             url.searchParams.set('request_id', String(id));
@@ -356,6 +345,7 @@ function employeeHistory(requests, initialSelectedId) {
                 approved: 'bg-green-100 text-green-800 border-green-200',
                 pending: 'bg-amber-100 text-amber-900 border-amber-200',
                 storno_requested: 'bg-orange-100 text-orange-900 border-orange-300',
+                change_requested: 'bg-violet-100 text-violet-900 border-violet-300',
                 rejected: 'bg-red-100 text-red-800 border-red-200',
                 cancelled: 'bg-gray-100 text-gray-600 border-gray-200',
             };

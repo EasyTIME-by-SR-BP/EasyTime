@@ -43,10 +43,10 @@ $statusItems = [
         </span>
         <span class="inline-flex items-center gap-2.5 text-sm font-medium text-emerald-800" role="listitem">
             <span
-                class="inline-block h-6 w-8 shrink-0 rounded-md bg-red-100/90 shadow-[inset_0_0_0_2px_rgba(220,38,38,0.55)]"
+                class="inline-block h-6 w-8 shrink-0 rounded-md bg-gray-200/80 shadow-[inset_0_0_0_2px_rgba(107,114,128,0.45)]"
                 aria-hidden="true"
             ></span>
-            <?= I18n::get('emp.legend_blocked') ?>
+            <?= I18n::get('ceo.legend_blocked_period') ?>
         </span>
     </div>
 </div>

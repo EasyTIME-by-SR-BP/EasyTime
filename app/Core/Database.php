@@ -141,6 +141,7 @@ class Database {
             ");
             self::ensureNotificationColumns($db);
             self::ensureRequestEventsTable($db);
+            self::ensureUrlaubChangeColumns($db);
             return;
         }
 
@@ -198,6 +199,22 @@ class Database {
         ");
         self::ensureNotificationColumns($db);
         self::ensureRequestEventsTable($db);
+        self::ensureUrlaubChangeColumns($db);
+    }
+
+    private static function ensureUrlaubChangeColumns(PDO $db): void {
+        $columns = [
+            'wunsch_beginn' => self::isMysql() ? 'DATE NULL' : 'TEXT DEFAULT NULL',
+            'wunsch_ende'   => self::isMysql() ? 'DATE NULL' : 'TEXT DEFAULT NULL',
+            'wunsch_tage'   => self::isMysql() ? 'INT NULL' : 'INTEGER DEFAULT NULL',
+        ];
+
+        foreach ($columns as $name => $definition) {
+            if (self::columnExists($db, 'urlaub', $name)) {
+                continue;
+            }
+            $db->exec("ALTER TABLE urlaub ADD COLUMN {$name} {$definition}");
+        }
     }
 
     private static function ensureRequestEventsTable(PDO $db): void {

@@ -119,7 +119,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'resolve_notification')
     exit;
 }
 
-$requirePasswordChange = false;
+$requirePasswordChange = User::mustChangePassword((int) $currentUser['id']);
 
 if ($action === 'calendar_ics') {
     $requestsForCalendar = ($isAdmin)
@@ -288,12 +288,137 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    if ($action === 'request_change' && $currentRole === 'Employee') {
+        $rid = isset($_POST['request_id']) ? (int) $_POST['request_id'] : 0;
+        $start = $_POST['new_start_date'] ?? null;
+        $end = $_POST['new_end_date'] ?? null;
+        if ($rid > 0 && $start && $end && $end >= $start) {
+            $netDays = VacationRequest::calculateNetDays($start, $end);
+            if ($netDays <= 0) {
+                header('Location: /?error=invalid_request');
+                exit;
+            }
+            $result = VacationRequest::requestChange($rid, (int) $currentUser['id'], $start, $end, $netDays);
+            if ($result === 'blocked_period') {
+                header('Location: /?error=blocked_period');
+                exit;
+            }
+            if ($result === 'request_conflict') {
+                header('Location: /?error=request_conflict');
+                exit;
+            }
+            if ($result === 'insufficient_balance') {
+                header('Location: /?error=insufficient_balance');
+                exit;
+            }
+            if ($result === 'fenstertage_exceeded') {
+                header('Location: /?error=fenstertage_exceeded');
+                exit;
+            }
+            if ($result) {
+                NotificationService::onChangeRequested($rid, (int) $currentUser['id']);
+                RequestEvent::log($rid, (int) $currentUser['id'], 'change_requested', $start . ' – ' . $end . ' (' . $netDays . ' Tage)');
+            }
+            $returnTab = ($_POST['return_tab'] ?? 'history') === 'calendar' ? 'calendar' : 'history';
+            header('Location: /?tab=' . $returnTab . '&request_id=' . $rid . '&success=action_success');
+            exit;
+        }
+        header('Location: /?error=invalid_request');
+        exit;
+    }
+
+    if ($action === 'withdraw_change' && $currentRole === 'Employee') {
+        if (!empty($_POST['request_id'])) {
+            $rid = (int) $_POST['request_id'];
+            if (VacationRequest::withdrawChangeRequest($rid, (int) $currentUser['id'])) {
+                RequestEvent::log($rid, (int) $currentUser['id'], 'change_withdrawn');
+            }
+            $returnTab = ($_POST['return_tab'] ?? 'history') === 'calendar' ? 'calendar' : 'history';
+            header('Location: /?tab=' . $returnTab . '&request_id=' . $rid . '&success=action_success');
+            exit;
+        }
+    }
+
+    if ($action === 'decide_change_request' && $isAdmin) {
+        $requestId = isset($_POST['request_id']) ? (int) $_POST['request_id'] : 0;
+        $decision = (string) ($_POST['decision'] ?? '');
+        $start = trim((string) ($_POST['approved_start_date'] ?? ''));
+        $end = trim((string) ($_POST['approved_end_date'] ?? ''));
+        $comment = trim((string) ($_POST['admin_comment'] ?? ''));
+        if ($requestId > 0 && in_array($decision, ['approve', 'reject'], true)) {
+            $before = VacationRequest::getById($requestId);
+            $startDate = ($start && $end) ? $start : null;
+            $endDate = ($start && $end) ? $end : null;
+            $ok = VacationRequest::decideChange($requestId, $decision === 'approve', $startDate, $endDate);
+            if ($ok === 'insufficient_balance') {
+                header('Location: /?error=insufficient_balance');
+                exit;
+            }
+            if (!$ok) {
+                header('Location: /?error=coverage_conflict');
+                exit;
+            }
+            if ($comment !== '') {
+                RequestComment::create($requestId, (int) $currentUser['id'], $comment);
+            }
+            RequestEvent::log(
+                $requestId,
+                (int) $currentUser['id'],
+                $decision === 'approve' ? 'change_approved' : 'change_rejected',
+                $before ? ($before['start_date'] . ' – ' . $before['end_date']) : null
+            );
+            NotificationService::onChangeDecided($requestId, $decision === 'approve', (int) $currentUser['id']);
+            header('Location: /?success=decided');
+            exit;
+        }
+        header('Location: /?error=invalid_request');
+        exit;
+    }
+
+    if ($action === 'admin_modify_vacation' && $isAdmin) {
+        $requestId = isset($_POST['request_id']) ? (int) $_POST['request_id'] : 0;
+        $start = $_POST['start_date'] ?? null;
+        $end = $_POST['end_date'] ?? null;
+        $comment = trim((string) ($_POST['admin_comment'] ?? ''));
+        if ($requestId > 0 && $start && $end && $end >= $start) {
+            $before = VacationRequest::getById($requestId);
+            $previousRange = $before ? ($before['start_date'] . ' – ' . $before['end_date']) : '';
+            $ok = VacationRequest::adminModifyVacation($requestId, $start, $end);
+            if ($ok === 'insufficient_balance') {
+                header('Location: /?error=insufficient_balance');
+                exit;
+            }
+            if (!$ok) {
+                header('Location: /?error=request_conflict');
+                exit;
+            }
+            if ($comment !== '') {
+                RequestComment::create($requestId, (int) $currentUser['id'], $comment);
+            }
+            RequestEvent::log($requestId, (int) $currentUser['id'], 'dates_adjusted', $previousRange . ' → ' . $start . ' – ' . $end);
+            NotificationService::onVacationModified($requestId, $previousRange, (int) $currentUser['id']);
+            header('Location: /?success=action_success');
+            exit;
+        }
+        header('Location: /?error=invalid_request');
+        exit;
+    }
+
     if ($action === 'decide_request' && $isAdmin) {
         $requestId = $_POST['request_id'] ?? null;
         $status = $_POST['status'] ?? null;
         $comment = trim((string) ($_POST['admin_comment'] ?? ''));
+        $approvedStart = trim((string) ($_POST['approved_start_date'] ?? ''));
+        $approvedEnd = trim((string) ($_POST['approved_end_date'] ?? ''));
         if ($requestId && $status) {
-            $ok = VacationRequest::decide($requestId, $currentUser['id'], $status, $comment);
+            $before = VacationRequest::getById((int) $requestId);
+            $startDate = ($approvedStart && $approvedEnd) ? $approvedStart : null;
+            $endDate = ($approvedStart && $approvedEnd) ? $approvedEnd : null;
+            $ok = VacationRequest::decide($requestId, $currentUser['id'], $status, $comment, $startDate, $endDate);
+            if ($ok === 'insufficient_balance') {
+                header('Location: /?error=insufficient_balance');
+                exit;
+            }
             if (!$ok) {
                 header("Location: /?error=coverage_conflict");
                 exit;
@@ -307,6 +432,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'cancelled' => 'cancelled',
                 default => 'updated',
             };
+            if ($before && (string) $status === 'approved' && $startDate && $endDate
+                && ($before['start_date'] !== $startDate || $before['end_date'] !== $endDate)) {
+                RequestEvent::log((int) $requestId, (int) $currentUser['id'], 'dates_adjusted', $before['start_date'] . ' – ' . $before['end_date'] . ' → ' . $startDate . ' – ' . $endDate);
+            }
             RequestEvent::log((int) $requestId, (int) $currentUser['id'], $eventType);
             if (in_array((string) $status, ['approved', 'rejected', 'cancelled'], true)) {
                 NotificationService::onVacationDecided((int) $requestId, (string) $status, (int) $currentUser['id']);
@@ -322,7 +451,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
-        $success = User::createEmployee(
+        $createdId = User::createEmployee(
             $_POST['firstname'],
             $_POST['lastname'],
             $_POST['email'],
@@ -332,9 +461,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ($_POST['department_id'] ?? '') !== '' ? $_POST['department_id'] : null,
             null,
             isset($_POST['vacation_entitlement_days']) ? (int) $_POST['vacation_entitlement_days'] : 25,
-            isset($_POST['overtime_hours']) ? (float) $_POST['overtime_hours'] : 0
+            isset($_POST['overtime_hours']) ? (float) $_POST['overtime_hours'] : 0,
+            !empty($_POST['must_change_password'])
         );
-        header("Location: /?success=" . ($success ? "employee_created" : "employee_failed"));
+        header("Location: /?tab=team&success=" . ($createdId ? "employee_created" : "employee_failed"));
         exit;
     }
 
@@ -378,7 +508,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $start = $_POST['start_date'] ?? null;
         $end = $_POST['end_date'] ?? null;
         $label = trim($_POST['label'] ?? '');
+        $confirmPast = !empty($_POST['confirm_past']);
+        $today = date('Y-m-d');
         if ($start && $end && $end >= $start) {
+            if (!$confirmPast && ($start < $today || $end < $today)) {
+                header("Location: /?error=past_date");
+                exit;
+            }
             $createdBlocked = VacationRequest::createBlockedPeriod($start, $end, $label ?: null, $currentUser['id']);
             if (!$createdBlocked) {
                 header("Location: /?error=blocked_exists");
@@ -396,9 +532,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $start = $_POST['start_date'] ?? null;
         $end = $_POST['end_date'] ?? null;
         $comment = trim($_POST['admin_comment'] ?? '');
+        $confirmPast = !empty($_POST['confirm_past']);
         if ($userId > 0 && $start && $end && $end >= $start) {
             $today = date('Y-m-d');
-            if ($start < $today || $end < $today) {
+            if (!$confirmPast && ($start < $today || $end < $today)) {
                 header("Location: /?error=past_date");
                 exit;
             }
@@ -440,9 +577,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $canComment = $request && ($isAdmin || (int) $request['user_id'] === (int) $currentUser['id']);
         if ($canComment && $comment !== '') {
             RequestComment::create($requestId, (int) $currentUser['id'], $comment);
-            $returnTab = ($currentRole === 'Employee') ? 'history' : 'operations';
+            $returnTab = ($_POST['return_tab'] ?? '') === 'history'
+                ? 'history'
+                : (($currentRole === 'Employee') ? 'history' : 'operations');
             $location = '/?tab=' . $returnTab;
-            if ($currentRole === 'Employee') {
+            if ($returnTab === 'history') {
                 $location .= '&request_id=' . $requestId;
             }
             header('Location: ' . $location . '&success=action_success');
@@ -570,7 +709,7 @@ if (!$isAdmin) {
 $inboxFilter = 'all';
 $inboxCounts = ['all' => 0, 'unread' => 0, 'tasks' => 0, 'password' => 0, 'approval' => 0, 'info' => 0, 'done' => 0];
 if ($isAdmin) {
-    if (!in_array($activeTab, ['operations', 'team', 'settings', 'inbox'], true)) {
+    if (!in_array($activeTab, ['operations', 'history', 'team', 'settings', 'inbox'], true)) {
         $activeTab = 'operations';
     }
 } else {
@@ -578,7 +717,7 @@ if ($isAdmin) {
         $activeTab = 'calendar';
     }
 }
-$selectedHistoryRequestId = (!$isAdmin && $activeTab === 'history' && isset($_GET['request_id']))
+$selectedHistoryRequestId = ($activeTab === 'history' && isset($_GET['request_id']))
     ? (int) $_GET['request_id']
     : 0;
 if ($activeTab === 'inbox') {
@@ -611,6 +750,7 @@ $requestStatusEventStyles = [
     'approved'         => ['bg' => '#16A34A', 'text' => '#ffffff'],
     'pending'          => ['bg' => '#F59E0B', 'text' => '#1a1a1a'],
     'storno_requested' => ['bg' => '#EA580C', 'text' => '#ffffff'],
+    'change_requested' => ['bg' => '#7C3AED', 'text' => '#ffffff'],
     'rejected'         => ['bg' => '#DC2626', 'text' => '#ffffff'],
     'cancelled'        => ['bg' => '#9CA3AF', 'text' => '#ffffff'],
 ];
@@ -626,6 +766,7 @@ foreach ($requests as $r) {
             'approved'         => I18n::get('emp.status_approved'),
             'pending'          => I18n::get('emp.status_pending'),
             'storno_requested' => I18n::get('emp.status_storno_requested'),
+            'change_requested' => I18n::get('emp.status_change_requested'),
             'rejected'         => I18n::get('emp.status_rejected'),
             'cancelled'        => I18n::get('emp.status_cancelled'),
             default            => $status,
@@ -636,6 +777,7 @@ foreach ($requests as $r) {
             'approved'         => I18n::get('emp.status_approved'),
             'pending'          => I18n::get('emp.status_pending'),
             'storno_requested' => I18n::get('emp.status_storno_requested'),
+            'change_requested' => I18n::get('emp.status_change_requested'),
             'rejected'         => I18n::get('emp.status_rejected'),
             'cancelled'        => I18n::get('emp.status_cancelled'),
             default            => I18n::get('emp.plan'),
@@ -657,6 +799,7 @@ foreach ($requests as $r) {
         'extendedProps' => [
             'status' => $status,
             'requestId' => $r['id'],
+            'userId' => (int) ($r['user_id'] ?? 0),
         ],
     ];
 }

@@ -138,4 +138,81 @@ class NotificationService {
     public static function onStornoWithdrawn(int $requestId, int $employeeId): void {
         Inbox::resolveThread('storno_request_' . $requestId, $employeeId);
     }
+
+    public static function onChangeRequested(int $requestId, int $employeeId): void {
+        $req = VacationRequest::getById($requestId);
+        $emp = User::getById($employeeId);
+        if (!$req || !$emp) {
+            return;
+        }
+
+        $name = trim($emp['firstname'] . ' ' . $emp['lastname']);
+        $current = $req['start_date'] . ' – ' . $req['end_date'];
+        $proposed = ($req['wunsch_start_date'] ?? '') . ' – ' . ($req['wunsch_end_date'] ?? '');
+
+        Inbox::send([
+            'to' => 'admins',
+            'title' => 'Änderungswunsch',
+            'message' => "{$name} möchte Urlaub #{$requestId} ändern: bisher {$current}, Wunsch {$proposed}.",
+            'category' => 'approval',
+            'type' => Inbox::TYPE_TASK,
+            'resolution' => Inbox::RESOLUTION_SHARED,
+            'thread_id' => 'change_request_' . $requestId,
+            'action_url' => '/?tab=operations&request_id=' . $requestId,
+            'related_user_id' => $employeeId,
+        ]);
+    }
+
+    public static function onChangeDecided(int $requestId, bool $approved, int $adminUserId = 0): void {
+        $req = VacationRequest::getById($requestId);
+        if (!$req) {
+            return;
+        }
+
+        if ($adminUserId > 0) {
+            Inbox::resolveThread('change_request_' . $requestId, $adminUserId);
+        }
+
+        $range = $req['start_date'] . ' – ' . $req['end_date'];
+        if ($approved) {
+            Inbox::send([
+                'to' => (int) $req['user_id'],
+                'title' => 'Urlaub angepasst',
+                'message' => "Dein Urlaub #{$requestId} wurde angepasst. Neuer Zeitraum: {$range}.",
+                'category' => 'success',
+                'type' => Inbox::TYPE_INFO,
+                'resolution' => Inbox::RESOLUTION_INDIVIDUAL,
+                'dedupe' => false,
+            ]);
+            return;
+        }
+
+        Inbox::send([
+            'to' => (int) $req['user_id'],
+            'title' => 'Änderungswunsch abgelehnt',
+            'message' => "Dein Änderungswunsch für Antrag #{$requestId} ({$range}) wurde abgelehnt. Der bisherige Zeitraum bleibt gültig.",
+            'category' => 'rejected',
+            'type' => Inbox::TYPE_INFO,
+            'resolution' => Inbox::RESOLUTION_INDIVIDUAL,
+            'dedupe' => false,
+        ]);
+    }
+
+    public static function onVacationModified(int $requestId, string $previousRange, int $adminUserId = 0): void {
+        $req = VacationRequest::getById($requestId);
+        if (!$req) {
+            return;
+        }
+
+        $newRange = $req['start_date'] . ' – ' . $req['end_date'];
+        Inbox::send([
+            'to' => (int) $req['user_id'],
+            'title' => 'Urlaub angepasst',
+            'message' => "Dein Urlaub #{$requestId} wurde vom Admin angepasst: {$previousRange} → {$newRange}.",
+            'category' => 'info',
+            'type' => Inbox::TYPE_INFO,
+            'resolution' => Inbox::RESOLUTION_INDIVIDUAL,
+            'dedupe' => false,
+        ]);
+    }
 }

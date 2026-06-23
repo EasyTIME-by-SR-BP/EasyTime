@@ -8,7 +8,7 @@ if (!isset($currentRole)) exit;
 <html lang="<?= $_SESSION['lang'] ?? 'de' ?>" class="antialiased">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>EasyTime | Dashboard</title>
     <link rel="icon" type="image/svg+xml" href="/assets/icons/urlaubsplaner_icon.svg">
     <script>
@@ -112,45 +112,81 @@ if (!isset($currentRole)) exit;
     <script>
         (function () {
             try {
-                if (window.matchMedia('(min-width: 1024px)').matches && sessionStorage.getItem('et-sidebar-open') === '1') {
-                    document.documentElement.classList.add('et-sidebar-pinned');
+                if (!window.matchMedia('(min-width: 1024px)').matches) return;
+                const legacy = sessionStorage.getItem('et-sidebar-open');
+                if (sessionStorage.getItem('et-sidebar-expanded') === null && legacy === '1') {
+                    sessionStorage.setItem('et-sidebar-expanded', '1');
+                }
+                if (sessionStorage.getItem('et-sidebar-expanded') === '1') {
+                    document.documentElement.classList.add('et-sidebar-expanded');
                 }
             } catch (e) {}
         })();
         function easytimeSidebar() {
-            const storageKey = 'et-sidebar-open';
-            const pin = () => {
-                if (window.innerWidth < 1024) return;
-                sessionStorage.setItem(storageKey, '1');
-                document.documentElement.classList.add('et-sidebar-pinned');
-            };
-            const unpin = () => {
-                if (window.innerWidth < 1024) return;
-                sessionStorage.removeItem(storageKey);
-                document.documentElement.classList.remove('et-sidebar-pinned');
+            const storageKey = 'et-sidebar-expanded';
+            const expandLabel = <?= json_encode(I18n::get('nav.sidebar_expand'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+            const collapseLabel = <?= json_encode(I18n::get('nav.sidebar_collapse'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+            const syncDom = (expanded) => {
+                if (window.innerWidth < 1024) {
+                    document.documentElement.classList.remove('et-sidebar-expanded');
+                    return;
+                }
+                document.documentElement.classList.toggle('et-sidebar-expanded', expanded);
+                window.setTimeout(function () {
+                    window.applyCeoEmployeeFilterPinLayout?.();
+                }, 210);
             };
             return {
-                closeTimer: null,
-                pin,
-                unpin,
-                open() {
-                    clearTimeout(this.closeTimer);
-                    pin();
+                expanded: (function () {
+                    try {
+                        return window.matchMedia('(min-width: 1024px)').matches
+                            && (document.documentElement.classList.contains('et-sidebar-expanded')
+                                || sessionStorage.getItem(storageKey) === '1');
+                    } catch (e) {
+                        return false;
+                    }
+                })(),
+                expandLabel,
+                collapseLabel,
+                init() {
+                    try {
+                        this.expanded = window.innerWidth >= 1024 && sessionStorage.getItem(storageKey) === '1';
+                    } catch (e) {
+                        this.expanded = false;
+                    }
+                    syncDom(this.expanded);
+                    window.addEventListener('resize', () => syncDom(this.expanded));
                 },
-                close() {
-                    clearTimeout(this.closeTimer);
-                    this.closeTimer = setTimeout(() => unpin(), 180);
+                toggle() {
+                    if (window.innerWidth < 1024) return;
+                    this.expanded = !this.expanded;
+                    try {
+                        sessionStorage.setItem(storageKey, this.expanded ? '1' : '0');
+                    } catch (e) {}
+                    syncDom(this.expanded);
                 },
-                persistOpen() {
-                    clearTimeout(this.closeTimer);
-                    pin();
+                expand() {
+                    if (window.innerWidth < 1024 || this.expanded) return;
+                    this.expanded = true;
+                    try {
+                        sessionStorage.setItem(storageKey, '1');
+                    } catch (e) {}
+                    syncDom(this.expanded);
+                },
+                onSidebarClick(event) {
+                    if (window.innerWidth < 1024 || this.expanded) return;
+                    if (event.target.closest('a, button, input, select, textarea, label')) return;
+                    this.expand();
                 },
             };
         }
         window.addEventListener('pageshow', function () {
             try {
-                if (window.matchMedia('(min-width: 1024px)').matches && sessionStorage.getItem('et-sidebar-open') === '1') {
-                    document.documentElement.classList.add('et-sidebar-pinned');
+                if (!window.matchMedia('(min-width: 1024px)').matches) return;
+                if (sessionStorage.getItem('et-sidebar-expanded') === '1') {
+                    document.documentElement.classList.add('et-sidebar-expanded');
+                } else {
+                    document.documentElement.classList.remove('et-sidebar-expanded');
                 }
             } catch (e) {}
         });
@@ -193,6 +229,35 @@ if (!isset($currentRole)) exit;
             background-color: var(--et-accent) !important;
             color: var(--et-accent-text) !important;
             border-color: var(--et-accent) !important;
+        }
+        .et-topbar-inbox-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            width: 2.5rem;
+            height: 2.5rem;
+            border-radius: 0.75rem;
+            border: 1px solid rgba(232, 0, 125, 0.2);
+            background-color: #fff;
+            color: #1a1a1a;
+            transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+        }
+        .et-topbar-inbox-btn:hover {
+            background-color: #fff8fc;
+            border-color: rgba(232, 0, 125, 0.35);
+        }
+        .et-topbar-inbox-btn.is-active,
+        .et-topbar-inbox-btn[aria-current="page"] {
+            background-color: var(--et-accent) !important;
+            border-color: var(--et-accent) !important;
+            color: #fff !important;
+        }
+        .et-topbar-inbox-btn.is-active:hover,
+        .et-topbar-inbox-btn[aria-current="page"]:hover {
+            background-color: var(--et-accent-hover) !important;
+            border-color: var(--et-accent-hover) !important;
+            color: #fff !important;
         }
         .et-info-surface {
             background-color: var(--et-info-bg);
@@ -265,6 +330,36 @@ if (!isset($currentRole)) exit;
         .et-checkbox:hover .et-checkbox__input:checked + .et-checkbox__box {
             background: var(--et-accent-hover);
             border-color: var(--et-accent-hover);
+        }
+        .ceo-employee-filter-item.et-checkbox {
+            display: flex;
+            width: 100%;
+            min-width: 0;
+            padding-left: 1.75rem;
+            padding-right: 0.375rem;
+        }
+        .ceo-employee-filter-item.et-checkbox.hidden {
+            display: none !important;
+        }
+        .ceo-employee-filter-item.et-checkbox > span:last-child {
+            min-width: 0;
+            flex: 1 1 auto;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        #ceo-employee-filter.is-pinned {
+            position: fixed;
+            top: var(--et-ceo-filter-top);
+            left: var(--et-ceo-filter-left, 0);
+            width: var(--et-ceo-filter-width, 100%);
+            z-index: 35;
+            box-shadow: 0 12px 28px rgba(26, 26, 26, 0.1);
+        }
+        #ceo-employee-filter-pin-btn.is-active {
+            background-color: var(--et-accent) !important;
+            color: var(--et-accent-text) !important;
+            border-color: var(--et-accent) !important;
         }
         .et-sidebar-tab {
             display: flex;
@@ -370,7 +465,14 @@ if (!isset($currentRole)) exit;
         /* KW-Anzeige */
         .fc-daygrid-week-number { font-size: 0.6rem !important; font-weight: 700 !important; color: #E8007D !important; background: rgba(232,0,125,0.08); border-radius: 4px; padding: 1px 5px !important; min-width: 2.2rem; text-align: center; }
         #employee-calendar.easytime-cross-month-drag,
-        #ceo-calendar.easytime-cross-month-drag { cursor: crosshair; }
+        #ceo-calendar.easytime-cross-month-drag {
+            cursor: crosshair;
+            user-select: none;
+        }
+        #employee-calendar .fc-day-other:not(.easytime-day-selected):not(.easytime-drag-preview) .fc-daygrid-day-number,
+        #ceo-calendar .fc-day-other:not(.easytime-day-selected):not(.easytime-drag-preview) .fc-daygrid-day-number {
+            opacity: 0.45;
+        }
         #employee-calendar .fc-daygrid-day.easytime-drag-preview,
         #ceo-calendar .fc-daygrid-day.easytime-drag-preview { background-color: rgba(255, 248, 231, 0.85) !important; }
         #employee-calendar .fc-daygrid-day.easytime-day-selected,
@@ -409,45 +511,51 @@ if (!isset($currentRole)) exit;
             z-index: 8 !important;
         }
         @media (min-width: 1024px) {
-            .easytime-layout {
-                --et-sidebar-w: 4.5rem;
-                --et-sidebar-w-hover: 18rem;
+            :root {
+                --et-sidebar-w-collapsed: 4.5rem;
+                --et-sidebar-w-expanded: 18rem;
+                --et-sidebar-w: var(--et-sidebar-w-collapsed);
+            }
+            html.et-sidebar-expanded {
+                --et-sidebar-w: var(--et-sidebar-w-expanded);
             }
             .easytime-sidebar {
                 position: fixed;
-                top: 4.5rem;
+                top: var(--et-topbar-h);
                 left: 0;
-                bottom: 0;
-                width: var(--et-sidebar-w) !important;
-                max-width: var(--et-sidebar-w-hover);
+                align-self: flex-start;
+                height: calc(100vh - var(--et-topbar-h));
+                width: var(--et-sidebar-w);
+                flex-shrink: 0;
                 overflow-x: hidden;
-                overflow-y: auto;
+                overflow-y: hidden;
                 overscroll-behavior: contain;
-                padding: 1rem 0.5rem;
-                z-index: 50;
+                padding: 0.75rem 0.5rem;
+                z-index: 20;
+                transition: width 0.2s ease;
             }
-            html.et-sidebar-pinned .easytime-sidebar,
-            .easytime-sidebar:hover {
-                width: var(--et-sidebar-w-hover) !important;
-                padding: 1.5rem;
-                box-shadow: 4px 0 24px rgba(26, 26, 26, 0.12);
+            html.et-sidebar-expanded .easytime-sidebar {
+                padding: 0.75rem 1rem 1rem;
             }
             .easytime-main {
+                flex: 1 1 auto;
+                min-width: 0;
                 margin-left: var(--et-sidebar-w);
+                transition: margin-left 0.2s ease;
             }
-            .easytime-sidebar .sidebar-label,
-            .easytime-sidebar .sidebar-section-title,
-            .easytime-sidebar .sidebar-badge {
+            html:not(.et-sidebar-expanded) .easytime-sidebar .sidebar-label,
+            html:not(.et-sidebar-expanded) .easytime-sidebar .sidebar-section-title,
+            html:not(.et-sidebar-expanded) .easytime-sidebar .sidebar-badge {
                 display: none !important;
+                width: 0 !important;
+                overflow: hidden !important;
             }
-            html.et-sidebar-pinned .easytime-sidebar .sidebar-label,
-            html.et-sidebar-pinned .easytime-sidebar .sidebar-section-title,
-            .easytime-sidebar:hover .sidebar-label,
-            .easytime-sidebar:hover .sidebar-section-title {
+            html.et-sidebar-expanded .easytime-sidebar .sidebar-label,
+            html.et-sidebar-expanded .easytime-sidebar .sidebar-section-title {
                 display: block !important;
+                width: auto !important;
             }
-            html.et-sidebar-pinned .easytime-sidebar .sidebar-badge,
-            .easytime-sidebar:hover .sidebar-badge {
+            html.et-sidebar-expanded .easytime-sidebar .sidebar-badge {
                 display: inline-flex !important;
             }
             .easytime-sidebar .et-sidebar-tab {
@@ -456,12 +564,292 @@ if (!isset($currentRole)) exit;
                 padding-right: 0.75rem;
                 gap: 0;
             }
-            html.et-sidebar-pinned .easytime-sidebar .et-sidebar-tab,
-            .easytime-sidebar:hover .et-sidebar-tab {
+            html:not(.et-sidebar-expanded) .easytime-sidebar .et-sidebar-tab {
+                min-height: 2.75rem;
+            }
+            .et-sidebar-nav-group {
+                display: flex;
+                flex-direction: column;
+                flex-wrap: wrap;
+                gap: 0.5rem;
+                width: 100%;
+            }
+            html.et-sidebar-expanded .easytime-sidebar .et-sidebar-tab {
                 justify-content: flex-start;
                 gap: 0.75rem;
                 padding-left: 1rem;
                 padding-right: 1rem;
+            }
+            .et-sidebar-header {
+                display: flex;
+                align-items: center;
+                flex-shrink: 0;
+                min-height: 2rem;
+                padding: 0 0.125rem;
+            }
+            html:not(.et-sidebar-expanded) .et-sidebar-header {
+                justify-content: center;
+            }
+            html.et-sidebar-expanded .et-sidebar-header {
+                justify-content: flex-end;
+                padding-right: 0.25rem;
+            }
+            .et-sidebar-toggle {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 2rem;
+                height: 2rem;
+                border-radius: 0.5rem;
+                border: none;
+                background: transparent;
+                color: var(--et-text);
+                padding: 0;
+                flex-shrink: 0;
+                transition: background-color 0.15s ease, color 0.15s ease;
+            }
+            .et-sidebar-toggle:hover {
+                background: rgba(232, 0, 125, 0.08);
+                color: var(--et-accent);
+            }
+            .et-sidebar-toggle:focus-visible {
+                outline: 2px solid rgba(232, 0, 125, 0.28);
+                outline-offset: 2px;
+            }
+            html:not(.et-sidebar-expanded) .easytime-sidebar {
+                cursor: pointer;
+            }
+            .history-detail-panel {
+                left: var(--et-sidebar-w);
+                top: var(--et-topbar-h);
+                transition: left 0.2s ease;
+            }
+        }
+        :root {
+            --et-topbar-h: 3.5rem;
+            --et-mobile-nav-h: 4.5rem;
+        }
+        @media (min-width: 640px) {
+            :root {
+                --et-topbar-h: 4.5rem;
+            }
+        }
+        @media (max-width: 1023px) {
+            html {
+                overflow: hidden;
+                width: 100%;
+                max-width: 100%;
+            }
+            body {
+                overflow: hidden;
+                width: 100%;
+                max-width: 100%;
+                height: 100%;
+                height: 100dvh;
+                height: 100svh;
+            }
+            body > .absolute[class*="blur-3xl"] {
+                display: none;
+            }
+            .easytime-app {
+                display: flex !important;
+                flex-direction: column !important;
+                width: 100%;
+                max-width: 100%;
+                min-height: 0 !important;
+                height: 100dvh !important;
+                height: 100svh !important;
+                max-height: 100dvh !important;
+                max-height: 100svh !important;
+                overflow: hidden !important;
+            }
+            .easytime-scroll-region {
+                flex: 1 1 auto !important;
+                min-height: 0 !important;
+                width: 100%;
+                max-width: 100%;
+                overflow-x: hidden !important;
+                overflow-y: auto !important;
+                overscroll-behavior-y: contain;
+                -webkit-overflow-scrolling: touch;
+                padding-bottom: 0.5rem !important;
+            }
+            .easytime-topbar {
+                flex-shrink: 0;
+                width: 100%;
+                max-width: 100%;
+                z-index: 51;
+            }
+            #ceo-employee-filter,
+            #ceo-employee-filter-anchor {
+                max-width: 100%;
+                min-width: 0;
+            }
+            #ceo-employee-filter.is-pinned {
+                top: 0.5rem;
+            }
+            .easytime-layout {
+                width: 100%;
+                max-width: 100%;
+                min-width: 0;
+            }
+            .easytime-main {
+                padding-bottom: 0.5rem !important;
+                width: 100%;
+                max-width: 100%;
+                min-width: 0;
+                overflow-x: hidden;
+            }
+            .easytime-main .bg-white.rounded-3xl {
+                max-width: 100%;
+                overflow-x: hidden;
+            }
+            .et-mobile-nav {
+                flex-shrink: 0;
+                width: 100%;
+                max-width: 100%;
+                z-index: 50;
+            }
+            .et-mobile-nav__item--active {
+                background: rgba(232, 0, 125, 0.08);
+            }
+            .et-mobile-nav__item {
+                min-width: 0;
+                padding-left: 0.125rem;
+                padding-right: 0.125rem;
+            }
+            .et-mobile-nav__item span:last-child {
+                max-width: 100%;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            .et-mobile-nav__item svg {
+                height: 1.125rem;
+                width: 1.125rem;
+            }
+            #employee-calendar,
+            #ceo-calendar {
+                width: 100%;
+                max-width: 100%;
+                overflow-x: hidden;
+            }
+            #employee-calendar .fc-view-harness,
+            #ceo-calendar .fc-view-harness {
+                width: 100% !important;
+                max-width: 100% !important;
+                overflow-x: hidden !important;
+            }
+            #employee-calendar .fc-scrollgrid,
+            #ceo-calendar .fc-scrollgrid,
+            #employee-calendar .fc-scrollgrid table,
+            #ceo-calendar .fc-scrollgrid table,
+            #employee-calendar .fc-scrollgrid-sync-table,
+            #ceo-calendar .fc-scrollgrid-sync-table {
+                width: 100% !important;
+                max-width: 100% !important;
+                table-layout: fixed !important;
+            }
+            #employee-calendar .fc-scroller-harness,
+            #ceo-calendar .fc-scroller-harness,
+            #employee-calendar .fc-scroller,
+            #ceo-calendar .fc-scroller {
+                overflow-x: hidden !important;
+            }
+            #employee-calendar .fc-scrollgrid-section > td,
+            #ceo-calendar .fc-scrollgrid-section > td,
+            #employee-calendar .fc-scrollgrid-section > th,
+            #ceo-calendar .fc-scrollgrid-section > th {
+                overflow: hidden;
+            }
+            #employee-calendar .fc-col-header-cell,
+            #ceo-calendar .fc-col-header-cell,
+            #employee-calendar .fc-daygrid-day,
+            #ceo-calendar .fc-daygrid-day {
+                min-width: 0 !important;
+            }
+            #employee-calendar .fc-header-toolbar,
+            #ceo-calendar .fc-header-toolbar {
+                flex-direction: column !important;
+                align-items: stretch !important;
+                gap: 0.5rem !important;
+            }
+            #employee-calendar .fc-toolbar-chunk,
+            #ceo-calendar .fc-toolbar-chunk {
+                display: flex !important;
+                justify-content: center !important;
+                width: 100% !important;
+            }
+            .history-detail-panel {
+                left: 0;
+                top: var(--et-topbar-h);
+            }
+            #employee-calendar .fc-toolbar,
+            #ceo-calendar .fc-toolbar {
+                gap: 0.375rem;
+                margin-bottom: 0.75rem !important;
+            }
+            #employee-calendar .fc-toolbar-title,
+            #ceo-calendar .fc-toolbar-title {
+                font-size: 1rem !important;
+            }
+            #employee-calendar .fc-button,
+            #ceo-calendar .fc-button {
+                padding: 0.25rem 0.5rem !important;
+                font-size: 0.75rem !important;
+            }
+            #employee-calendar .fc-daygrid-week-number,
+            #ceo-calendar .fc-daygrid-week-number {
+                display: none !important;
+            }
+            #employee-calendar .fc-col-header-cell-cushion,
+            #ceo-calendar .fc-col-header-cell-cushion {
+                font-size: 0.65rem !important;
+                padding: 2px !important;
+            }
+            #employee-calendar .fc-daygrid-day-number,
+            #ceo-calendar .fc-daygrid-day-number {
+                font-size: 0.75rem !important;
+                padding: 2px 4px !important;
+            }
+            #employee-calendar .fc-event,
+            #ceo-calendar .fc-event {
+                font-size: 0.625rem !important;
+            }
+            #ceo-employee-filter .flex.items-center.gap-2,
+            #ceo-employee-filter .flex.min-w-0.w-full {
+                min-width: 0;
+            }
+            @media (max-width: 639px) {
+                .easytime-main .mb-5.flex.flex-col[aria-label] {
+                    gap: 0.5rem;
+                }
+                .easytime-main .mb-5.flex.flex-col[aria-label] .text-sm {
+                    font-size: 0.6875rem;
+                }
+                .easytime-main .mb-5.flex.flex-col[aria-label] .gap-x-4 {
+                    column-gap: 0.625rem;
+                    row-gap: 0.375rem;
+                }
+            }
+            .scrollbar-none {
+                -ms-overflow-style: none;
+                scrollbar-width: none;
+            }
+            .scrollbar-none::-webkit-scrollbar {
+                display: none;
+            }
+            .et-btn-primary,
+            .et-btn-secondary,
+            .et-mobile-nav__item,
+            .fc-button {
+                touch-action: manipulation;
+            }
+        }
+        @media (max-width: 639px) {
+            #employee-calendar .fc-header-toolbar .fc-toolbar-chunk:last-child,
+            #ceo-calendar .fc-header-toolbar .fc-toolbar-chunk:last-child {
+                display: none;
             }
         }
         [x-cloak] { display: none !important; }
@@ -472,7 +860,7 @@ if (!isset($currentRole)) exit;
         }
     </style>
 </head>
-<body class="min-h-screen flex flex-col relative overflow-x-hidden">
+<body class="min-h-screen max-lg:overflow-hidden lg:overflow-x-hidden relative">
     <!-- Sunny accents -->
     <div class="absolute top-[-10%] right-[-10%] w-96 h-96 bg-yellow-300 rounded-full mix-blend-multiply opacity-20 blur-3xl z-[-1]"></div>
     <div class="absolute bottom-[-10%] left-[-10%] w-96 h-96 bg-lime-300 rounded-full mix-blend-multiply opacity-20 blur-3xl z-[-1]"></div>
@@ -507,36 +895,61 @@ if (!isset($currentRole)) exit;
         $sidebarTabActive = 'et-sidebar-tab--active';
         $sidebarTabIdle = 'et-sidebar-tab--idle';
     ?>
-    <div class="relative z-10 flex min-h-screen w-full flex-col">
+    <div class="easytime-app relative z-10 flex w-full max-w-full flex-col min-h-screen lg:min-h-screen">
         <?php include __DIR__ . '/partials/topbar.php'; ?>
 
-        <div class="easytime-layout flex min-h-0 flex-1 w-full">
+        <div class="easytime-scroll-region flex min-h-0 flex-1 w-full max-w-full flex-col lg:contents">
+        <div class="easytime-layout flex min-h-0 flex-1 w-full max-w-full min-w-0">
         <aside
-            class="easytime-sidebar max-lg:w-full shrink-0 border-b border-lime-200/60 bg-white/95 shadow-sm backdrop-blur-lg lg:border-b-0 lg:border-r"
+            class="easytime-sidebar max-lg:hidden shrink-0 border-b border-lime-200/60 bg-white/95 shadow-sm backdrop-blur-lg lg:border-b-0 lg:border-r"
             x-data="easytimeSidebar()"
-            @mouseenter="open()"
-            @mouseleave="close()"
-            @mousedown.capture="if ($event.target.closest('a')) persistOpen()"
+            x-init="init()"
+            @click="onSidebarClick($event)"
         >
-            <div class="flex h-full min-h-0 flex-col gap-5 p-4 lg:p-0">
-                <?php if ($activeTab === 'inbox'): ?>
-                    <?php include __DIR__ . '/partials/sidebar-inbox.php'; ?>
-                <?php else: ?>
-                <nav class="flex flex-wrap gap-2 max-lg:flex-row lg:flex-col" aria-label="Dashboard Navigation">
+            <div class="flex h-full min-h-0 flex-col p-4 lg:p-0 lg:h-full lg:gap-2">
+                <div class="et-sidebar-header hidden lg:flex">
+                    <button
+                        type="button"
+                        class="et-sidebar-toggle"
+                        @click.stop="toggle()"
+                        :aria-expanded="expanded.toString()"
+                        :title="expanded ? collapseLabel : expandLabel"
+                        :aria-label="expanded ? collapseLabel : expandLabel"
+                    >
+                        <svg x-show="!expanded" x-cloak class="h-[1.125rem] w-[1.125rem]" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M9 4v16"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M11 9l3 3-3 3"/>
+                        </svg>
+                        <svg x-show="expanded" x-cloak class="h-[1.125rem] w-[1.125rem]" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M9 4v16"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M14 9l-3 3 3 3"/>
+                        </svg>
+                    </button>
+                </div>
+                <nav class="flex flex-col flex-1 min-h-0 h-full gap-2 max-lg:gap-5" aria-label="Dashboard Navigation">
                     <?php if (in_array($currentRole, ['CEO', 'Admin'], true)): ?>
-                        <a href="/?tab=operations" class="<?= $sidebarTabClass ?> <?= $activeTab === 'operations' ? $sidebarTabActive : $sidebarTabIdle ?>" title="Kalender & Genehmigungen">
-                            <?= easytime_nav_icon('calendar') ?>
-                            <span class="sidebar-label flex-1">Kalender & Genehmigungen</span>
-                        </a>
-                        <a href="/?tab=team" class="<?= $sidebarTabClass ?> <?= $activeTab === 'team' ? $sidebarTabActive : $sidebarTabIdle ?>" title="Team">
-                            <?= easytime_nav_icon('team') ?>
-                            <span class="sidebar-label flex-1">Team</span>
-                        </a>
-                        <a href="/?tab=settings" class="<?= $sidebarTabClass ?> <?= $activeTab === 'settings' ? $sidebarTabActive : $sidebarTabIdle ?>" title="Globale Einstellungen">
-                            <?= easytime_nav_icon('settings') ?>
-                            <span class="sidebar-label flex-1">Globale Einstellungen</span>
-                        </a>
+                        <div class="et-sidebar-nav-group lg:flex-1 lg:min-h-0 lg:overflow-y-auto">
+                            <a href="/?tab=operations" class="<?= $sidebarTabClass ?> <?= $activeTab === 'operations' ? $sidebarTabActive : $sidebarTabIdle ?>" title="<?= I18n::get('ceo.nav_operations') ?>">
+                                <?= easytime_nav_icon('calendar') ?>
+                                <span class="sidebar-label flex-1"><?= I18n::get('ceo.nav_operations') ?></span>
+                            </a>
+                            <a href="/?tab=history" class="<?= $sidebarTabClass ?> <?= $activeTab === 'history' ? $sidebarTabActive : $sidebarTabIdle ?>" title="<?= I18n::get('ceo.nav_history') ?>">
+                                <?= easytime_nav_icon('history') ?>
+                                <span class="sidebar-label flex-1"><?= I18n::get('ceo.nav_history') ?></span>
+                            </a>
+                        </div>
+                        <div class="et-sidebar-nav-group w-full border-t border-lime-200/80 pt-2 shrink-0">
+                            <a href="/?tab=team" class="<?= $sidebarTabClass ?> <?= $activeTab === 'team' ? $sidebarTabActive : $sidebarTabIdle ?>" title="<?= I18n::get('ceo.team') ?>">
+                                <?= easytime_nav_icon('team') ?>
+                                <span class="sidebar-label flex-1"><?= I18n::get('ceo.team') ?></span>
+                            </a>
+                            <a href="/?tab=settings" class="<?= $sidebarTabClass ?> <?= $activeTab === 'settings' ? $sidebarTabActive : $sidebarTabIdle ?>" title="<?= I18n::get('ceo.nav_settings') ?>">
+                                <?= easytime_nav_icon('settings') ?>
+                                <span class="sidebar-label flex-1"><?= I18n::get('ceo.nav_settings') ?></span>
+                            </a>
+                        </div>
                     <?php else: ?>
+                        <div class="et-sidebar-nav-group lg:flex-1 lg:min-h-0 lg:overflow-y-auto">
                         <a href="/?tab=calendar" class="<?= $sidebarTabClass ?> <?= $activeTab === 'calendar' ? $sidebarTabActive : $sidebarTabIdle ?>" title="<?= I18n::get('emp.calendar') ?>">
                             <?= easytime_nav_icon('calendar') ?>
                             <span class="sidebar-label flex-1"><?= I18n::get('emp.calendar') ?></span>
@@ -545,64 +958,36 @@ if (!isset($currentRole)) exit;
                             <?= easytime_nav_icon('history') ?>
                             <span class="sidebar-label flex-1"><?= I18n::get('history.title') ?></span>
                         </a>
+                        </div>
                     <?php endif; ?>
                 </nav>
-                <?php endif; ?>
             </div>
         </aside>
 
         <!-- Main Content -->
-        <main class="easytime-main relative z-10 flex-1 w-full min-w-0 p-4 sm:p-6 lg:p-8 flex flex-col gap-8 overflow-x-hidden">
-        
-        <?php if (isset($_GET['success'])): ?>
-            <div class="bg-lime-50 border border-lime-200 text-lime-800 px-4 py-3 rounded-xl text-sm flex items-center shadow-sm mb-4">
-                <svg class="w-5 h-5 mr-3 text-lime-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-                <?php 
-                    if ($_GET['success'] === 'employee_created') echo I18n::get('msg.employee_created');
-                    else echo I18n::get('msg.action_success');
-                ?>
-            </div>
-        <?php endif; ?>
-
-        <?php if (isset($_GET['error'])): ?>
-            <div class="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-xl text-sm flex items-center shadow-sm mb-4">
-                <svg class="w-5 h-5 mr-3 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                <?php 
-                    if ($_GET['error'] === 'invalid_mnr') echo (($_SESSION['lang'] ?? 'de') === 'de' ? 'Personalnummer (MNR) darf nur aus Zahlen bestehen!' : 'Staff number (MNR) must only contain digits!');
-                    elseif ($_GET['error'] === 'blocked_period') echo (($_SESSION['lang'] ?? 'de') === 'de' ? 'In diesem Zeitraum ist keine Urlaubsbuchung erlaubt.' : 'Vacation booking is blocked for this selected period.');
-                    elseif ($_GET['error'] === 'request_conflict') echo (($_SESSION['lang'] ?? 'de') === 'de' ? 'Dieser Zeitraum überschneidet sich mit einem bestehenden Urlaubsantrag.' : 'This range overlaps with an existing vacation request.');
-                    elseif ($_GET['error'] === 'blocked_exists') echo (($_SESSION['lang'] ?? 'de') === 'de' ? 'Dieser Sperrbereich existiert bereits oder überschneidet einen bestehenden.' : 'This blocked period already exists or overlaps an existing blocked period.');
-                    elseif ($_GET['error'] === 'past_date') echo (($_SESSION['lang'] ?? 'de') === 'de' ? 'Urlaub kann nicht in der Vergangenheit beantragt werden.' : 'Vacation cannot be requested for past dates.');
-                    elseif ($_GET['error'] === 'coverage_conflict') echo (($_SESSION['lang'] ?? 'de') === 'de' ? 'Genehmigung nicht möglich: Mindestbesetzung würde unterschritten.' : 'Approval failed: minimum staffing would be violated.');
-                    elseif ($_GET['error'] === 'fenstertage_exceeded') echo (($_SESSION['lang'] ?? 'de') === 'de' ? 'Dein Urlaubsantrag enthält zu viele Fenstertage (Brückentage). Bitte teile den Zeitraum auf.' : 'Your request contains too many window days (bridge days). Please split the period.');
-                    elseif ($_GET['error'] === 'insufficient_balance') echo (($_SESSION['lang'] ?? 'de') === 'de' ? 'Nicht genügend Urlaubstage verfügbar.' : 'Not enough vacation days remaining.');
-                    elseif ($_GET['error'] === 'self_delete_forbidden') echo (($_SESSION['lang'] ?? 'de') === 'de' ? 'Du kannst deinen eigenen Admin-Account nicht löschen.' : 'You cannot delete your own admin account.');
-                    else echo "An error occurred.";
-                ?>
-            </div>
-        <?php endif; ?>
+        <main class="easytime-main relative z-10 flex-1 w-full min-w-0 p-3 sm:p-6 lg:p-8 flex flex-col gap-6 sm:gap-8 overflow-x-hidden">
 
         <?php if ($currentRole === 'Employee' && $activeTab === 'calendar'): ?>
-            <div class="space-y-8">
-                <div class="bg-white rounded-3xl border border-lime-100 shadow-xl p-6 sm:p-7 relative overflow-hidden">
+            <div class="space-y-6 sm:space-y-8 min-w-0">
+                <div class="bg-white rounded-3xl border border-lime-100 shadow-xl p-4 sm:p-7 relative overflow-hidden min-w-0">
                     <div class="pointer-events-none absolute -right-10 -top-10 h-36 w-36 rounded-full bg-lime-100/70 blur-3xl" aria-hidden="true"></div>
                     <h3 class="text-xs font-bold uppercase tracking-[0.2em] text-emerald-500 mb-5 relative"><?= I18n::get('emp.vacation_stats') ?></h3>
-                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-6 sm:gap-8 relative">
+                    <div class="grid grid-cols-4 gap-3 sm:gap-8 relative">
                         <div>
-                            <div class="text-4xl font-bold text-emerald-900 tabular-nums leading-none"><?= (int)($userVacationStats['entitlement'] ?? 0) ?></div>
-                            <div class="mt-2 text-sm font-medium text-emerald-600"><?= I18n::get('emp.stats_total') ?></div>
+                            <div class="text-2xl sm:text-4xl font-bold text-emerald-900 tabular-nums leading-none"><?= (int)($userVacationStats['entitlement'] ?? 0) ?></div>
+                            <div class="mt-1.5 sm:mt-2 text-[11px] sm:text-sm font-medium text-emerald-600 leading-tight"><?= I18n::get('emp.stats_total') ?></div>
                         </div>
                         <div>
-                            <div class="text-4xl font-bold text-emerald-900 tabular-nums leading-none"><?= (int)($userVacationStats['planned'] ?? 0) ?></div>
-                            <div class="mt-2 text-sm font-medium text-emerald-600"><?= I18n::get('emp.stats_planned') ?></div>
+                            <div class="text-2xl sm:text-4xl font-bold text-emerald-900 tabular-nums leading-none"><?= (int)($userVacationStats['planned'] ?? 0) ?></div>
+                            <div class="mt-1.5 sm:mt-2 text-[11px] sm:text-sm font-medium text-emerald-600 leading-tight"><?= I18n::get('emp.stats_planned') ?></div>
                         </div>
                         <div>
-                            <div class="text-4xl font-bold text-emerald-900 tabular-nums leading-none"><?= (int)($userVacationStats['approved'] ?? 0) ?></div>
-                            <div class="mt-2 text-sm font-medium text-emerald-600"><?= I18n::get('emp.stats_taken') ?></div>
+                            <div class="text-2xl sm:text-4xl font-bold text-emerald-900 tabular-nums leading-none"><?= (int)($userVacationStats['approved'] ?? 0) ?></div>
+                            <div class="mt-1.5 sm:mt-2 text-[11px] sm:text-sm font-medium text-emerald-600 leading-tight"><?= I18n::get('emp.stats_taken') ?></div>
                         </div>
                         <div>
-                            <div class="text-4xl font-bold text-[#E8007D] tabular-nums leading-none"><?= (int)($userVacationStats['remaining'] ?? 0) ?></div>
-                            <div class="mt-2 text-sm font-medium text-emerald-600"><?= I18n::get('emp.stats_remaining') ?></div>
+                            <div class="text-2xl sm:text-4xl font-bold text-[#E8007D] tabular-nums leading-none"><?= (int)($userVacationStats['remaining'] ?? 0) ?></div>
+                            <div class="mt-1.5 sm:mt-2 text-[11px] sm:text-sm font-medium text-emerald-600 leading-tight"><?= I18n::get('emp.stats_remaining') ?></div>
                         </div>
                     </div>
                     <?php if (($maxFenstertage ?? 0) > 0): ?>
@@ -612,10 +997,11 @@ if (!isset($currentRole)) exit;
                     <?php endif; ?>
                 </div>
 
-                <div class="grid grid-cols-1 xl:grid-cols-3 gap-8">
-                    <div class="xl:col-span-2 bg-white p-6 sm:p-7 rounded-3xl shadow-xl border border-lime-100">
+                <div class="grid grid-cols-1 xl:grid-cols-3 gap-6 sm:gap-8 min-w-0">
+                    <div class="xl:col-span-2 bg-white p-4 sm:p-7 rounded-3xl shadow-xl border border-lime-100 overflow-hidden min-w-0">
                         <h2 class="text-xs font-bold uppercase tracking-[0.2em] text-emerald-500 mb-2"><?= I18n::get('emp.calendar') ?></h2>
-                        <p class="text-sm text-emerald-600/80 mb-4 leading-relaxed"><?= I18n::get('emp.calendar_hint') ?></p>
+                        <p class="text-sm text-emerald-600/80 mb-4 leading-relaxed lg:hidden"><?= I18n::get('emp.calendar_hint_mobile') ?></p>
+                        <p class="hidden lg:block text-sm text-emerald-600/80 mb-4 leading-relaxed"><?= I18n::get('emp.calendar_hint') ?></p>
                         <?php include __DIR__ . '/partials/employee-calendar-legend.php'; ?>
                         <label class="et-checkbox mb-4" for="employee-show-cancelled">
                             <input
@@ -630,16 +1016,33 @@ if (!isset($currentRole)) exit;
                     </div>
 
                     <div class="calendar-side-panel">
-                        <div class="bg-white p-6 sm:p-7 rounded-3xl shadow-xl border border-lime-100">
+                        <div class="bg-white p-6 sm:p-7 rounded-3xl shadow-xl border border-lime-100" x-data="vacationForm()">
+                            <section id="employee-calendar-range-section" class="mb-6">
+                                <h3 class="text-xs font-bold uppercase tracking-[0.2em] text-[#E8007D] mb-4"><?= I18n::get('emp.panel_period') ?></h3>
+                                <div id="employee-calendar-range-empty" class="relative overflow-hidden py-5 text-center">
+                                    <p class="relative text-base font-bold text-emerald-900"><?= I18n::get('emp.calendar_range_empty_title') ?></p>
+                                    <p class="relative mt-2 text-sm leading-relaxed text-emerald-600/80 max-w-[16rem] mx-auto"><?= I18n::get('emp.calendar_range_empty') ?></p>
+                                </div>
+                                <div id="employee-calendar-range-content" class="hidden space-y-4">
+                                    <div id="employee-calendar-range-summary" class="text-xl font-bold text-emerald-900 leading-tight tabular-nums"></div>
+                                    <div id="employee-calendar-range-inputs" class="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label class="block text-sm font-semibold text-emerald-800 mb-1.5" for="employee-start-date"><?= I18n::get('emp.start_date') ?></label>
+                                            <input id="employee-start-date" form="employee-request-form" type="date" name="start_date" x-model="start" @change="calculateDays" min="<?= date('Y-m-d') ?>" required class="w-full bg-[#fffdf2] border border-lime-200 rounded-xl px-4 py-3 text-emerald-900 focus:ring-2 focus:ring-lime-400 outline-none transition-all">
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-semibold text-emerald-800 mb-1.5" for="employee-end-date"><?= I18n::get('emp.end_date') ?></label>
+                                            <input id="employee-end-date" form="employee-request-form" type="date" name="end_date" x-model="end" @change="calculateDays" min="<?= date('Y-m-d') ?>" required class="w-full bg-[#fffdf2] border border-lime-200 rounded-xl px-4 py-3 text-emerald-900 focus:ring-2 focus:ring-lime-400 outline-none transition-all">
+                                        </div>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <div class="h-px bg-gradient-to-r from-transparent via-lime-200 to-transparent mb-6" aria-hidden="true"></div>
+
                             <section id="employee-calendar-info-panel" class="mb-6">
                                 <h3 class="text-xs font-bold uppercase tracking-[0.2em] text-emerald-500 mb-4"><?= I18n::get('emp.panel_info') ?></h3>
-                                <div id="employee-calendar-info-empty" class="relative overflow-hidden py-6 text-center">
-                                    <div class="pointer-events-none absolute -right-6 -top-6 h-28 w-28 rounded-full bg-lime-100/80 blur-2xl" aria-hidden="true"></div>
-                                    <div class="relative mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-lime-50 to-emerald-50 text-emerald-500 shadow-inner">
-                                        <svg class="h-7 w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                                        </svg>
-                                    </div>
+                                <div id="employee-calendar-info-empty" class="relative overflow-hidden py-5 text-center">
                                     <p class="relative text-base font-bold text-emerald-900"><?= I18n::get('emp.calendar_info_empty_title') ?></p>
                                     <p class="relative mt-2 text-sm leading-relaxed text-emerald-600/80 max-w-[16rem] mx-auto"><?= I18n::get('emp.calendar_info_empty') ?></p>
                                 </div>
@@ -651,49 +1054,27 @@ if (!isset($currentRole)) exit;
                             <div class="h-px bg-gradient-to-r from-transparent via-lime-200 to-transparent mb-6" aria-hidden="true"></div>
 
                             <section>
-                                <h3 class="text-xs font-bold uppercase tracking-[0.2em] text-[#E8007D] mb-4"><?= I18n::get('emp.panel_action') ?></h3>
-                                <div id="employee-calendar-action-empty" class="relative overflow-hidden py-6 text-center">
-                                    <div class="pointer-events-none absolute -left-8 bottom-0 h-24 w-24 rounded-full bg-[#fff0f8]/90 blur-2xl" aria-hidden="true"></div>
-                                    <div class="relative mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#fff8fc] to-lime-50 text-[#E8007D] shadow-inner">
-                                        <svg class="h-7 w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5"/>
-                                        </svg>
-                                    </div>
+                                <h3 class="text-xs font-bold uppercase tracking-[0.2em] text-emerald-500 mb-4"><?= I18n::get('emp.panel_action') ?></h3>
+                                <div id="employee-calendar-action-empty" class="relative overflow-hidden py-5 text-center">
                                     <p class="relative text-base font-bold text-emerald-900"><?= I18n::get('emp.calendar_action_empty_title') ?></p>
                                     <p class="relative mt-2 text-sm leading-relaxed text-emerald-600/80 max-w-[16rem] mx-auto"><?= I18n::get('emp.calendar_action_empty') ?></p>
                                 </div>
 
                                 <div id="employee-calendar-action-range" class="hidden space-y-4">
-                                    <form id="employee-request-form" action="/?action=create_request" method="POST" x-data="vacationForm()" class="space-y-4">
-                                        <div
-                                            x-show="hasInvalidSelection"
-                                            x-cloak
-                                            class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
-                                        >
-                                            <p class="font-bold mb-0.5" x-text="invalidSelectionTitle"></p>
-                                            <p x-text="invalidSelectionMessage"></p>
-                                        </div>
-                                        <div>
-                                            <label class="block text-sm font-semibold text-emerald-800 mb-1.5"><?= I18n::get('emp.start_date') ?></label>
-                                            <input id="employee-start-date" type="date" name="start_date" x-model="start" @change="calculateDays" min="<?= date('Y-m-d') ?>" required class="w-full bg-[#fffdf2] border border-lime-200 rounded-xl px-4 py-3 text-emerald-900 focus:ring-2 focus:ring-lime-400 outline-none transition-all">
-                                        </div>
-                                        <div>
-                                            <label class="block text-sm font-semibold text-emerald-800 mb-1.5"><?= I18n::get('emp.end_date') ?></label>
-                                            <input id="employee-end-date" type="date" name="end_date" x-model="end" @change="calculateDays" min="<?= date('Y-m-d') ?>" required class="w-full bg-[#fffdf2] border border-lime-200 rounded-xl px-4 py-3 text-emerald-900 focus:ring-2 focus:ring-lime-400 outline-none transition-all">
-                                        </div>
+                                    <form id="employee-request-form" action="/?action=create_request" method="POST" class="space-y-4" @submit="handleEmployeeRequestSubmit($event)">
                                         <div class="flex items-center justify-between gap-4 py-1">
                                             <span class="text-sm font-medium text-emerald-700"><?= I18n::get('emp.days_deduct') ?></span>
                                             <span class="text-4xl font-bold text-emerald-900 tabular-nums" x-text="netDays">0</span>
                                             <input type="hidden" name="net_days" x-model="netDays">
                                         </div>
-                                        <button type="submit" class="w-full et-btn-primary font-bold py-3 px-4 rounded-xl shadow-lg shadow-lime-400/30 transition-all outline-none disabled:opacity-50 disabled:cursor-not-allowed" :disabled="netDays <= 0 || !start || !end || hasInvalidSelection">
+                                        <button type="submit" class="w-full et-btn-primary font-bold py-3 px-4 rounded-xl shadow-lg shadow-lime-400/30 transition-all outline-none disabled:opacity-50 disabled:cursor-not-allowed" :disabled="netDays <= 0 || !start || !end">
                                             <?= I18n::get('emp.send_request') ?>
                                         </button>
                                     </form>
                                 </div>
 
-                                <div id="employee-calendar-action-event" class="hidden space-y-3">
-                                    <div id="employee-selected-event-actions" class="space-y-2"></div>
+                                <div id="employee-calendar-action-event" class="hidden space-y-4">
+                                    <div id="employee-selected-event-actions" class="space-y-4"></div>
                                 </div>
                             </section>
                         </div>
@@ -710,431 +1091,46 @@ if (!isset($currentRole)) exit;
             <?php include __DIR__ . '/partials/inbox.php'; ?>
 
         <?php elseif (in_array($currentRole, ['CEO', 'Admin'], true) && $activeTab === 'operations'): ?>
-            <!-- ADMIN: Kalender & Genehmigungen -->
-            <div class="space-y-8">
-                    <div class="grid grid-cols-1 xl:grid-cols-3 gap-8">
-                        <div class="xl:col-span-2 bg-white p-6 rounded-3xl shadow-xl border border-lime-100">
-                            <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
-                                <h2 class="text-2xl font-bold text-emerald-900">Kalender + Requests</h2>
-                                <button type="button" onclick="openExportModal(true)" class="et-btn-secondary px-3 py-2 rounded-lg text-sm font-semibold">ICS Export</button>
-                            </div>
-                            <p class="text-sm text-emerald-700 mb-4">Gesperrte Zeitraeume markieren (fuer Mitarbeiter nicht buchbar). Zeitraum ziehen; am oberen/unteren Rand wechselt der Monat mit. Termine nur in „Kalender Actions“ rechts — ohne Scroll zur Liste.</p>
-                            <div id="ceo-calendar"></div>
-                        </div>
-                        <div class="space-y-4 calendar-side-panel">
-                            <div id="calendar-info-panel" class="bg-white p-6 rounded-3xl shadow-xl border border-lime-100">
-                                <h3 class="text-xl font-bold text-emerald-900 mb-4">Kalender Infos</h3>
-                            <div id="calendar-info-content" class="hidden">
-                            <div class="grid grid-cols-3 gap-2 mb-4">
-                                <div class="rounded-xl border border-lime-200 bg-lime-50 p-2">
-                                    <div class="text-[10px] uppercase text-emerald-700 font-bold">Mitarbeiter</div>
-                                    <div class="text-lg font-bold text-emerald-900"><?= (int)($capacitySummary['employees_total'] ?? 0) ?></div>
-                                </div>
-                                <div class="rounded-xl border border-yellow-200 bg-yellow-50 p-2">
-                                    <div class="text-[10px] uppercase text-emerald-700 font-bold">Abwesend</div>
-                                    <div class="text-lg font-bold text-emerald-900"><?= (int)($capacitySummary['absent_approved'] ?? 0) ?></div>
-                                </div>
-                                <div class="rounded-xl border border-emerald-200 bg-white p-2">
-                                    <div class="text-[10px] uppercase text-emerald-700 font-bold">Verfuegbar</div>
-                                    <div class="text-lg font-bold text-emerald-900"><?= (int)($capacitySummary['available'] ?? 0) ?></div>
-                                </div>
-                            </div>
-                            <div id="calendar-info-meta" class="text-xs text-emerald-700 bg-yellow-50 border border-yellow-200 rounded-xl p-3 mb-4 hidden"></div>
-                            </div>
-                            </div>
+            <?php include __DIR__ . '/partials/admin-operations.php'; ?>
 
-                            <div class="bg-white p-6 rounded-3xl shadow-xl border border-lime-100">
-                            <h3 class="text-xl font-bold text-emerald-900 mb-4">Kalender Actions</h3>
-                            <div id="calendar-action-empty" class="hidden"></div>
-                            <form id="calendar-action-block-form" method="POST" action="/?action=create_blocked_period" class="space-y-3 hidden">
-                                <div class="grid grid-cols-2 gap-2">
-                                    <button type="button" id="action-mode-block-btn" class="bg-red-100 text-red-700 border border-red-200 py-2 rounded-xl text-sm font-bold">Sperrbereich</button>
-                                    <button type="button" id="action-mode-vacation-btn" class="et-btn-secondary py-2 rounded-xl text-sm font-bold">Urlaubszeit buchen</button>
-                                </div>
-                                <h4 class="text-sm uppercase tracking-wider font-bold text-emerald-700">Sperrbereich setzen</h4>
-                                <div>
-                                    <label class="block text-sm font-semibold text-emerald-800 mb-1">Start</label>
-                                    <input id="blocked-start-date" type="date" name="start_date" required class="w-full bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2.5 text-emerald-900 outline-none">
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-semibold text-emerald-800 mb-1">Ende</label>
-                                    <input id="blocked-end-date" type="date" name="end_date" required class="w-full bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2.5 text-emerald-900 outline-none">
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-semibold text-emerald-800 mb-1">Bezeichnung (optional)</label>
-                                    <input type="text" name="label" placeholder="z.B. Betriebsurlaub" class="w-full bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2.5 text-emerald-900 outline-none">
-                                </div>
-                                <button type="submit" class="w-full bg-red-400 hover:bg-red-500 text-white font-bold py-2.5 rounded-xl">Sperrzeit speichern</button>
-                            </form>
-
-                            <form id="calendar-action-vacation-form" method="POST" action="/?action=admin_create_vacation" class="space-y-3 hidden">
-                                <div class="grid grid-cols-2 gap-2">
-                                    <button type="button" id="action-mode-block-btn-2" class="et-btn-secondary py-2 rounded-xl text-sm font-bold">Sperrbereich</button>
-                                    <button type="button" id="action-mode-vacation-btn-2" class="et-btn-primary py-2 rounded-xl text-sm font-bold">Urlaubszeit buchen</button>
-                                </div>
-                                <h4 class="text-sm uppercase tracking-wider font-bold text-emerald-700">Urlaubszeit fuer Mitarbeiter buchen</h4>
-                                <div>
-                                    <label class="block text-sm font-semibold text-emerald-800 mb-1">Mitarbeiter</label>
-                                    <select name="user_id" required class="w-full bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2.5 text-emerald-900 outline-none">
-                                        <option value="">Bitte auswaehlen</option>
-                                        <?php foreach (($employees ?? []) as $empOpt): ?>
-                                            <?php if (($empOpt['role'] ?? '') !== 'Employee') continue; ?>
-                                            <option value="<?= $empOpt['id'] ?>"><?= htmlspecialchars($empOpt['firstname'] . ' ' . $empOpt['lastname']) ?></option>
-                                        <?php endforeach; ?>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-semibold text-emerald-800 mb-1">Start</label>
-                                    <input id="admin-vacation-start-date" type="date" name="start_date" min="<?= date('Y-m-d') ?>" required class="w-full bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2.5 text-emerald-900 outline-none">
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-semibold text-emerald-800 mb-1">Ende</label>
-                                    <input id="admin-vacation-end-date" type="date" name="end_date" min="<?= date('Y-m-d') ?>" required class="w-full bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2.5 text-emerald-900 outline-none">
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-semibold text-emerald-800 mb-1">Kommentar im Verlauf (optional)</label>
-                                    <input type="text" name="admin_comment" class="w-full bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2.5 text-emerald-900 outline-none">
-                                </div>
-                                <button type="submit" class="w-full et-btn-primary font-bold py-2.5 rounded-xl">Urlaubszeit buchen</button>
-                            </form>
-
-                            <div id="calendar-action-unblock" class="space-y-3 hidden">
-                                <h4 class="text-sm uppercase tracking-wider font-bold text-emerald-700">Sperrbereich aufheben</h4>
-                                <div id="calendar-action-unblock-list" class="space-y-2"></div>
-                            </div>
-
-                            <div id="calendar-action-event" class="space-y-3 hidden">
-                                <h4 class="text-sm uppercase tracking-wider font-bold text-emerald-700">Termin Details</h4>
-                                <div id="calendar-selected-event-info" class="text-sm text-emerald-800 bg-yellow-50 border border-yellow-200 rounded-xl p-4"></div>
-                                <form method="POST" action="/?action=decide_request" class="space-y-3">
-                                    <input type="hidden" id="calendar-selected-request-id" name="request_id" value="">
-                                    <input type="hidden" id="calendar-selected-action-decline-value" value="rejected">
-                                    <input type="hidden" id="calendar-selected-action-approve-value" value="approved">
-                                    <input type="text" name="admin_comment" placeholder="Kommentar zur Entscheidung (optional)" class="w-full bg-white border border-yellow-200 rounded-xl px-4 py-2.5 text-sm text-emerald-900 outline-none">
-                                    <div class="grid grid-cols-2 gap-2">
-                                        <button type="submit" id="calendar-event-decline-btn" name="status" value="rejected" class="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 py-2 rounded-xl text-sm font-bold"><?= I18n::get('ceo.decline') ?></button>
-                                        <button type="submit" id="calendar-event-approve-btn" name="status" value="approved" class="et-btn-primary py-2 rounded-xl text-sm font-bold"><?= I18n::get('ceo.approve') ?></button>
-                                    </div>
-                                </form>
-                            </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 xl:grid-cols-3 gap-8">
-                        <div class="xl:col-span-2">
-                            <h2 class="text-3xl font-bold mb-6 text-emerald-900 tracking-tight"><?= I18n::get('ceo.need_approval') ?></h2>
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <?php 
-                        $hasPending = false;
-                        foreach ($requests as $req): 
-                            if (!in_array($req['status'], ['pending', 'storno_requested'])) continue;
-                            $hasPending = true;
-                            $isStorno = $req['status'] === 'storno_requested';
-                        ?>
-                            <div id="request-card-<?= $req['id'] ?>" data-request-id="<?= $req['id'] ?>" class="bg-white rounded-3xl p-6 shadow-xl shadow-lime-900/5 border <?= $isStorno ? 'border-orange-300' : 'border-lime-200' ?> relative overflow-hidden flex flex-col hover:-translate-y-1 transition-transform duration-300">
-                                <div class="absolute top-0 right-0 w-24 h-24 <?= $isStorno ? 'bg-orange-100' : 'bg-yellow-100' ?> rounded-bl-full -z-10 mix-blend-multiply opacity-50"></div>
-                                <div class="flex justify-between items-start mb-5">
-                                    <div>
-                                        <h3 class="font-bold text-xl text-emerald-900 flex items-center gap-2">
-                                            <?= htmlspecialchars($req['firstname'] . ' ' . $req['lastname']) ?>
-                                            <?php if($isStorno): ?>
-                                                <span class="bg-orange-500/10 text-orange-600 text-[10px] uppercase font-black px-2 py-0.5 rounded-md">Storno</span>
-                                            <?php endif; ?>
-                                        </h3>
-                                        <p class="text-sm font-medium text-emerald-600"><?= htmlspecialchars($req['email']) ?></p>
-                                    </div>
-                                    <span class="<?= $isStorno ? 'bg-orange-100 text-orange-800 border-orange-200' : 'bg-lime-100 text-emerald-800 border-lime-200' ?> text-xs px-3 py-1.5 rounded-lg font-bold border whitespace-nowrap">
-                                        <?= $req['net_days'] ?> <?= I18n::get('ceo.days') ?>
-                                    </span>
-                                </div>
-                                
-                                <div class="bg-yellow-50/50 rounded-2xl p-4 mb-6 flex gap-4 text-center items-center justify-center border border-yellow-100">
-                                    <div>
-                                        <div class="text-[10px] text-emerald-600/70 font-bold uppercase tracking-widest mb-1"><?= I18n::get('ceo.from') ?></div>
-                                        <div class="font-bold text-emerald-800"><?= date('d.m.Y', strtotime($req['start_date'])) ?></div>
-                                    </div>
-                                    <div class="text-lime-400 font-black">→</div>
-                                    <div>
-                                        <div class="text-[10px] text-emerald-600/70 font-bold uppercase tracking-widest mb-1"><?= I18n::get('ceo.to') ?></div>
-                                        <div class="font-bold text-emerald-800"><?= date('d.m.Y', strtotime($req['end_date'])) ?></div>
-                                    </div>
-                                </div>
-
-                                <form action="/?action=decide_request" method="POST" class="mt-auto space-y-3 relative z-10">
-                                    <input type="hidden" name="request_id" value="<?= $req['id'] ?>">
-                                    <input type="text" name="admin_comment" placeholder="Kommentar zur Entscheidung (optional)" class="w-full bg-white border border-yellow-200 rounded-xl px-4 py-2.5 text-sm text-emerald-900 focus:ring-2 focus:ring-lime-400 outline-none transition-all placeholder:text-emerald-300">
-                                    <div class="flex gap-3">
-                                        <?php if ($isStorno): ?>
-                                            <!-- Approving Storno = Cancelled -->
-                                            <!-- Rejecting Storno = Stays Approved -->
-                                            <button type="submit" name="status" value="approved" class="flex-1 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 py-3 rounded-xl text-sm font-bold transition-all">Decline Storno</button>
-                                            <button type="submit" name="status" value="cancelled" class="flex-1 bg-orange-400 hover:bg-orange-500 shadow-md shadow-orange-400/20 text-white py-3 rounded-xl text-sm font-bold transition-all">Approve Storno</button>
-                                        <?php else: ?>
-                                            <button type="submit" name="status" value="rejected" class="flex-1 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 py-3 rounded-xl text-sm font-bold transition-all"><?= I18n::get('ceo.decline') ?></button>
-                                            <button type="submit" name="status" value="approved" class="flex-1 et-btn-primary py-3 rounded-xl text-sm font-bold transition-all"><?= I18n::get('ceo.approve') ?></button>
-                                        <?php endif; ?>
-                                    </div>
-                                </form>
-
-                                <div class="mt-4 border-t border-yellow-100 pt-3 space-y-2">
-                                    <div class="text-xs uppercase tracking-wider font-bold text-emerald-700">Kommentare</div>
-                                    <?php foreach (($requestCommentsById[$req['id']] ?? []) as $c): ?>
-                                        <div class="text-xs bg-yellow-50 border border-yellow-100 rounded-lg p-2">
-                                            <span class="font-bold"><?= htmlspecialchars($c['firstname'] . ' ' . $c['lastname']) ?>:</span>
-                                            <?= htmlspecialchars($c['comment']) ?>
-                                        </div>
-                                    <?php endforeach; ?>
-                                    <?php if (empty($requestCommentsById[$req['id']] ?? [])): ?>
-                                        <div class="text-xs text-emerald-600">Noch keine Kommentare. Der optionale Entscheidungskommentar erscheint hier.</div>
-                                    <?php endif; ?>
-                                </div>
-                            </div>
-                        <?php endforeach; ?>
-                        
-                        <?php if (!$hasPending): ?>
-                            <div class="col-span-full py-16 text-center text-emerald-600/60 bg-white/50 rounded-3xl border-2 border-dashed border-lime-200">
-                                <svg class="w-16 h-16 mx-auto mb-4 text-lime-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                                <p class="text-xl font-bold tracking-tight text-emerald-800"><?= I18n::get('ceo.empty_requests') ?></p>
-                                <p class="font-medium text-emerald-600/80"><?= I18n::get('ceo.empty_desc') ?></p>
-                            </div>
-                        <?php endif; ?>
-                            </div>
-                        </div>
-                    </div>
-                    <!-- ── URLAUBSSUCHE ─────────────────────────────── -->
-                    <div class="bg-white p-6 rounded-3xl shadow-xl border border-lime-100">
-                        <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
-                            <h3 class="text-xl font-bold text-emerald-900">Urlaubssuche</h3>
-                            <div class="flex gap-2 flex-wrap">
-                                <input type="text" id="req-search-name"
-                                    placeholder="Mitarbeiter suchen…"
-                                    oninput="filterRequests()"
-                                    class="bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-2 text-sm text-emerald-900 outline-none focus:ring-2 focus:ring-lime-400 w-52">
-                                <select id="req-search-status" onchange="filterRequests()"
-                                    class="bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2 text-sm text-emerald-900 outline-none focus:ring-2 focus:ring-lime-400">
-                                    <option value="">Alle Status</option>
-                                    <option value="pending">Ausstehend</option>
-                                    <option value="approved">Genehmigt</option>
-                                    <option value="rejected">Abgelehnt</option>
-                                    <option value="storno_requested">Storno angefragt</option>
-                                    <option value="cancelled">Storniert</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="overflow-x-auto">
-                            <table class="w-full text-left border-collapse min-w-[560px]">
-                                <thead>
-                                    <tr class="bg-lime-50 border-b border-lime-100 text-xs uppercase text-emerald-700 tracking-wider font-semibold">
-                                        <th class="p-3">Mitarbeiter</th>
-                                        <th class="p-3">Zeitraum</th>
-                                        <th class="p-3">Tage</th>
-                                        <th class="p-3">Status</th>
-                                        <th class="p-3 text-right">Aktion</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="req-search-tbody" class="divide-y divide-lime-100 text-emerald-800 text-sm font-medium"></tbody>
-                            </table>
-                            <div id="req-search-empty" class="py-8 text-center text-emerald-600/60 font-medium hidden">Keine Ergebnisse.</div>
-                        </div>
-                    </div>
-
-                    <div class="bg-white p-6 rounded-3xl shadow-xl border border-lime-100">
-                        <h3 class="text-xl font-bold text-emerald-900 mb-4">Audit Log</h3>
-                        <div class="space-y-2 max-h-64 overflow-auto pr-1">
-                            <?php foreach (($recentAuditLogs ?? []) as $log): ?>
-                                <div class="p-3 rounded-xl border border-yellow-100 bg-yellow-50">
-                                    <div class="text-xs font-bold text-emerald-800"><?= htmlspecialchars($log['action']) ?></div>
-                                    <div class="text-xs text-emerald-700"><?= htmlspecialchars(($log['firstname'] ?? 'System') . ' ' . ($log['lastname'] ?? '')) ?></div>
-                                    <div class="text-[10px] text-emerald-500"><?= htmlspecialchars($log['created_at']) ?></div>
-                                </div>
-                            <?php endforeach; ?>
-                            <?php if (empty($recentAuditLogs)): ?>
-                                <div class="text-sm text-emerald-600">Noch keine Audit-Eintraege.</div>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-            </div>
+        <?php elseif (in_array($currentRole, ['CEO', 'Admin'], true) && $activeTab === 'history'): ?>
+            <?php include __DIR__ . '/partials/admin-history.php'; ?>
 
         <?php elseif (in_array($currentRole, ['CEO', 'Admin'], true) && $activeTab === 'team'): ?>
-                    <?php $isTeamDetail = isset($_GET['team_view']) && $_GET['team_view'] === 'detail'; ?>
-                    <?php if ($isTeamDetail && isset($selectedTeamUser) && $selectedTeamUser): ?>
-                        <div class="bg-white rounded-3xl p-6 shadow-xl shadow-lime-900/5 border border-lime-100">
-                            <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
-                                <a href="/?tab=team" class="text-sm font-bold text-emerald-700 hover:text-emerald-900">← Zurueck zur Team-Uebersicht</a>
-                                <span class="text-xs font-bold px-3 py-1 rounded-full <?= $selectedTeamUser['role'] === 'CEO' ? 'bg-blue-100 text-blue-700' : 'bg-lime-100 text-emerald-700' ?>"><?= $selectedTeamUser['role'] === 'CEO' ? 'Admin' : htmlspecialchars($selectedTeamUser['role']) ?></span>
-                            </div>
-                            <h3 class="text-2xl font-bold text-emerald-900"><?= htmlspecialchars($selectedTeamUser['firstname'] . ' ' . $selectedTeamUser['lastname']) ?></h3>
-                            <p class="text-sm text-emerald-600 mb-5"><?= htmlspecialchars($selectedTeamUser['email']) ?> | MNR <?= htmlspecialchars($selectedTeamUser['mnr']) ?></p>
-
-                            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
-                                <div class="bg-lime-50 border border-lime-200 rounded-xl p-3"><div class="text-xs uppercase font-bold text-emerald-700">Urlaubstage gesamt</div><div class="text-xl font-bold text-emerald-900"><?= (int) $selectedTeamUser['vacation_entitlement_days'] ?></div></div>
-                                <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-3"><div class="text-xs uppercase font-bold text-emerald-700">Bereits genehmigt</div><div class="text-xl font-bold text-emerald-900"><?= (int) ($selectedTeamUserUsedDays ?? 0) ?></div></div>
-                                <div class="bg-white border border-emerald-200 rounded-xl p-3"><div class="text-xs uppercase font-bold text-emerald-700">Resturlaub</div><div class="text-xl font-bold text-emerald-900"><?= max(0, (int)$selectedTeamUser['vacation_entitlement_days'] - (int)($selectedTeamUserUsedDays ?? 0)) ?></div></div>
-                            </div>
-
-                            <?php $isOwnAdminAccount = ((int) $selectedTeamUser['id'] === (int) $currentUser['id']) && (($currentUser['role'] ?? '') === 'CEO'); ?>
-                            <?php if ($isOwnAdminAccount): ?>
-                                <div class="flex justify-end mb-3">
-                                    <span class="text-xs font-semibold text-emerald-700 bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-1.5">
-                                        <?= (($_SESSION['lang'] ?? 'de') === 'de') ? 'Eigener Admin-Account kann nicht gelöscht werden.' : 'Own admin account cannot be deleted.' ?>
-                                    </span>
-                                </div>
-                            <?php else: ?>
-                                <form method="POST" action="/?action=delete_employee" onsubmit="return confirm('Ensure you want to delete this employee?');" class="flex justify-end mb-3">
-                                    <input type="hidden" name="emp_id" value="<?= $selectedTeamUser['id'] ?>">
-                                    <button type="submit" class="text-red-600 font-bold text-sm"><?= I18n::get('ceo.delete') ?></button>
-                                </form>
-                            <?php endif; ?>
-
-                            <form method="POST" action="/?action=edit_employee" class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                <input type="hidden" name="emp_id" value="<?= $selectedTeamUser['id'] ?>">
-                                <div><label class="block text-xs font-bold text-emerald-700 mb-1">Vorname</label><input type="text" name="firstname" value="<?= htmlspecialchars($selectedTeamUser['firstname']) ?>" class="w-full bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2.5 text-emerald-900 outline-none"></div>
-                                <div><label class="block text-xs font-bold text-emerald-700 mb-1">Nachname</label><input type="text" name="lastname" value="<?= htmlspecialchars($selectedTeamUser['lastname']) ?>" class="w-full bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2.5 text-emerald-900 outline-none"></div>
-                                <div><label class="block text-xs font-bold text-emerald-700 mb-1">E-Mail</label><input type="email" name="email" value="<?= htmlspecialchars($selectedTeamUser['email']) ?>" class="w-full bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2.5 text-emerald-900 outline-none"></div>
-                                <div><label class="block text-xs font-bold text-emerald-700 mb-1">MNR</label><input type="text" name="mnr" value="<?= htmlspecialchars($selectedTeamUser['mnr']) ?>" pattern="[A-Za-z]?[0-9]+" title="MNR, z.B. M002 oder 002" class="w-full bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2.5 text-emerald-900 outline-none"></div>
-                                <div><label class="block text-xs font-bold text-emerald-700 mb-1">Rolle</label><select name="role" class="w-full bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2.5 text-emerald-900 outline-none">
-                                    <option value="Employee" <?= $selectedTeamUser['role'] === 'Employee' ? 'selected' : '' ?>>Employee</option>
-                                    <option value="Admin" <?= $selectedTeamUser['role'] === 'CEO' ? 'selected' : '' ?>>Admin</option>
-                                </select></div>
-                                <div><label class="block text-xs font-bold text-emerald-700 mb-1">Department</label><select name="department_id" class="w-full bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2.5 text-emerald-900 outline-none">
-                                    <option value="">Department</option>
-                                    <?php foreach (($departments ?? []) as $dept): ?>
-                                        <option value="<?= $dept['id'] ?>" <?= ((string)$selectedTeamUser['department_id'] === (string)$dept['id']) ? 'selected' : '' ?>><?= htmlspecialchars($dept['name']) ?></option>
-                                    <?php endforeach; ?>
-                                </select></div>
-                                <div><label class="block text-xs font-bold text-emerald-700 mb-1">Urlaubstage</label><input type="number" min="0" name="vacation_entitlement_days" value="<?= (int)$selectedTeamUser['vacation_entitlement_days'] ?>" class="w-full bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2.5 text-emerald-900 outline-none"></div>
-                                <div><label class="block text-xs font-bold text-emerald-700 mb-1">Ueberstunden</label><input type="number" min="0" step="0.5" name="overtime_hours" value="<?= htmlspecialchars($selectedTeamUser['overtime_hours']) ?>" class="w-full bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2.5 text-emerald-900 outline-none"></div>
-                                <div class="md:col-span-2"><label class="block text-xs font-bold text-emerald-700 mb-1">Neues Passwort (optional)</label><input type="password" name="password" id="team-password-field" class="w-full bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2.5 text-emerald-900 outline-none <?= (isset($_GET['focus']) && $_GET['focus'] === 'password') ? 'ring-2 ring-lime-400 border-lime-400' : '' ?>"></div>
-                                <div class="md:col-span-2 flex justify-end items-center mt-1">
-                                    <button type="submit" class="et-btn-primary px-4 py-2 rounded-xl font-bold"><?= I18n::get('ceo.save') ?></button>
-                                </div>
-                            </form>
-                        </div>
-                        <?php if (isset($_GET['focus']) && $_GET['focus'] === 'password'): ?>
-                        <script>
-                            document.getElementById('team-password-field')?.focus();
-                            document.getElementById('team-password-field')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        </script>
-                        <?php endif; ?>
-
-                        <div class="bg-white rounded-3xl p-6 shadow-xl shadow-lime-900/5 border border-lime-100 mt-6">
-                            <h4 class="text-xl font-bold text-emerald-900 mb-4">Urlaubsuebersicht dieses Users</h4>
-                            <div class="overflow-x-auto">
-                                <table class="w-full text-left border-collapse min-w-[560px]">
-                                    <thead>
-                                        <tr class="bg-lime-50 border-b border-lime-100 text-xs uppercase text-emerald-700 tracking-wider font-semibold">
-                                            <th class="p-3">Zeitraum</th>
-                                            <th class="p-3">Tage</th>
-                                            <th class="p-3">Status</th>
-                                            <th class="p-3">Kommentar</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody class="divide-y divide-lime-100 text-emerald-800 text-sm">
-                                        <?php foreach (($selectedTeamUserRequests ?? []) as $req): ?>
-                                            <tr>
-                                                <td class="p-3"><?= htmlspecialchars($req['start_date']) ?> - <?= htmlspecialchars($req['end_date']) ?></td>
-                                                <td class="p-3"><?= (int)$req['net_days'] ?></td>
-                                                <td class="p-3"><?= htmlspecialchars($req['status']) ?></td>
-                                                <td class="p-3">
-                                                    <?php
-                                                        $requestCommentList = $requestCommentsById[$req['id']] ?? [];
-                                                        $latestComment = !empty($requestCommentList) ? $requestCommentList[count($requestCommentList) - 1] : null;
-                                                    ?>
-                                                    <?= $latestComment ? htmlspecialchars($latestComment['comment']) : '-' ?>
-                                                </td>
-                                            </tr>
-                                        <?php endforeach; ?>
-                                        <?php if (empty($selectedTeamUserRequests)): ?>
-                                            <tr><td class="p-4 text-emerald-600" colspan="4">Keine Urlaubsantraege vorhanden.</td></tr>
-                                        <?php endif; ?>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    <?php else: ?>
-                        <div class="grid grid-cols-1 xl:grid-cols-3 gap-8" x-data="{ teamSearch: '' }">
-                            <div class="xl:col-span-2 bg-white rounded-3xl p-6 shadow-xl shadow-lime-900/5 border border-lime-100">
-                                <div class="flex items-center justify-between gap-3 mb-4">
-                                    <h3 class="text-2xl font-bold text-emerald-900">Alle User</h3>
-                                    <input type="text" x-model="teamSearch" placeholder="Suche nach Name, E-Mail, MNR..." class="w-full max-w-md bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2.5 text-emerald-900 outline-none">
-                                </div>
-                                <div class="space-y-2 max-h-[620px] overflow-auto pr-1">
-                                    <?php if (isset($employees)): foreach ($employees as $emp): ?>
-                                        <a
-                                            href="/?tab=team&team_view=detail&team_user=<?= $emp['id'] ?>"
-                                            x-show="'<?= strtolower(htmlspecialchars($emp['firstname'] . ' ' . $emp['lastname'] . ' ' . $emp['email'] . ' ' . $emp['mnr'])) ?>'.includes(teamSearch.toLowerCase())"
-                                            class="flex items-center justify-between gap-3 p-4 rounded-xl border border-yellow-100 bg-white hover:bg-yellow-50"
-                                        >
-                                            <div>
-                                                <div class="font-semibold text-emerald-900"><?= htmlspecialchars($emp['firstname'] . ' ' . $emp['lastname']) ?></div>
-                                                <div class="text-xs text-emerald-600"><?= htmlspecialchars($emp['email']) ?> | MNR <?= htmlspecialchars($emp['mnr']) ?></div>
-                                            </div>
-                                            <span class="text-xs font-bold px-2 py-1 rounded-full <?= $emp['role'] === 'CEO' ? 'bg-blue-100 text-blue-700' : 'bg-lime-100 text-emerald-700' ?>"><?= $emp['role'] === 'CEO' ? 'Admin' : htmlspecialchars($emp['role']) ?></span>
-                                        </a>
-                                    <?php endforeach; endif; ?>
-                                </div>
-                            </div>
-
-                            <div class="bg-white rounded-3xl p-6 shadow-xl shadow-lime-900/5 border border-lime-100">
-                                <h3 class="text-xl font-bold text-emerald-900 mb-4">Neuen User erstellen</h3>
-                                <form action="/?action=create_employee" method="POST" class="space-y-3">
-                                    <div class="grid grid-cols-2 gap-3">
-                                        <input type="text" name="firstname" placeholder="<?= I18n::get('ceo.firstname') ?>" required class="w-full bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2.5 text-emerald-900 outline-none">
-                                        <input type="text" name="lastname" placeholder="<?= I18n::get('ceo.lastname') ?>" required class="w-full bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2.5 text-emerald-900 outline-none">
-                                    </div>
-                                    <input type="email" name="email" placeholder="<?= I18n::get('ceo.email') ?>" required class="w-full bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2.5 text-emerald-900 outline-none">
-                                    <input type="text" name="mnr" placeholder="<?= I18n::get('ceo.mnr') ?>" pattern="[A-Za-z]?[0-9]+" title="MNR, z.B. M002 oder 002" required class="w-full bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2.5 text-emerald-900 outline-none">
-                                    <input type="password" id="new_emp_pw" name="password" placeholder="<?= I18n::get('ceo.initial_pw') ?>" required class="w-full bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2.5 text-emerald-900 outline-none">
-                                    <div class="grid grid-cols-2 gap-3">
-                                        <select name="role" class="w-full bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2.5 text-emerald-900 outline-none">
-                                            <option value="Employee">Employee</option>
-                                            <option value="Admin">Admin</option>
-                                        </select>
-                                        <select name="department_id" class="w-full bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2.5 text-emerald-900 outline-none">
-                                            <option value="">Department</option>
-                                            <?php foreach (($departments ?? []) as $dept): ?>
-                                                <option value="<?= $dept['id'] ?>"><?= htmlspecialchars($dept['name']) ?></option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                    </div>
-                                    <div class="grid grid-cols-2 gap-3">
-                                        <input type="number" min="0" name="vacation_entitlement_days" value="25" placeholder="Urlaubstage" class="w-full bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2.5 text-emerald-900 outline-none">
-                                        <input type="number" min="0" step="0.5" name="overtime_hours" value="0" placeholder="Ueberstunden" class="w-full bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2.5 text-emerald-900 outline-none">
-                                    </div>
-                                    <button type="submit" class="w-full et-btn-primary font-bold py-2.5 rounded-xl"><?= I18n::get('ceo.register_btn') ?></button>
-                                </form>
-                            </div>
-                        </div>
-                    <?php endif; ?>
+            <?php include __DIR__ . '/partials/admin-team.php'; ?>
 
         <?php elseif (in_array($currentRole, ['CEO', 'Admin'], true) && $activeTab === 'settings'): ?>
-            <div class="bg-white rounded-3xl p-6 shadow-xl shadow-lime-900/5 border border-lime-100 max-w-3xl">
-                <h2 class="text-2xl font-bold text-emerald-900 mb-2"><?= I18n::get('settings.title') ?></h2>
-                <p class="text-sm text-emerald-600 mb-6"><?= I18n::get('settings.holidays_note') ?></p>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <form method="POST" action="/?action=update_min_staff" class="flex items-end gap-2">
-                        <div class="flex-1">
-                            <label class="block text-xs font-bold text-emerald-700 mb-1"><?= I18n::get('settings.min_staff') ?></label>
-                            <input type="number" min="0" name="min_staff_available" value="<?= (int)($minStaffAvailable ?? 1) ?>" class="w-full bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2 text-emerald-900 outline-none">
+            <div class="space-y-6 max-w-3xl">
+                <div>
+                    <h2 class="text-xs font-bold uppercase tracking-[0.2em] text-emerald-500 mb-2"><?= I18n::get('ceo.nav_settings') ?></h2>
+                    <p class="text-sm text-emerald-600/80 leading-relaxed"><?= I18n::get('settings.holidays_note') ?></p>
+                </div>
+                <div class="bg-white rounded-3xl p-6 sm:p-7 shadow-xl border border-lime-100 space-y-6">
+                    <form method="POST" action="/?action=update_min_staff" class="space-y-2">
+                        <label class="block text-sm font-semibold text-emerald-800" for="settings-min-staff"><?= I18n::get('settings.min_staff') ?></label>
+                        <div class="flex items-end gap-3">
+                            <input id="settings-min-staff" type="number" min="0" name="min_staff_available" value="<?= (int)($minStaffAvailable ?? 1) ?>" class="flex-1 w-full bg-[#fffdf2] border border-lime-200 rounded-xl px-4 py-3 text-sm text-emerald-900 outline-none focus:ring-2 focus:ring-lime-400">
+                            <button type="submit" class="et-btn-primary font-bold px-5 py-3 rounded-xl text-sm shrink-0"><?= I18n::get('ceo.save') ?></button>
                         </div>
-                        <button type="submit" class="et-btn-primary font-bold px-3 py-2 rounded-xl">✓</button>
                     </form>
-                    <form method="POST" action="/?action=update_max_fenstertage" class="flex items-end gap-2">
-                        <div class="flex-1">
-                            <label class="block text-xs font-bold text-emerald-700 mb-1">
-                                <?= I18n::get('settings.max_fenstertage') ?>
-                                <span class="font-normal text-emerald-500"><?= I18n::get('settings.max_fenstertage_hint') ?></span>
-                            </label>
-                            <input type="number" min="0" name="max_fenstertage" value="<?= (int)($maxFenstertage ?? 0) ?>" class="w-full bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2 text-emerald-900 outline-none">
+                    <div class="h-px bg-gradient-to-r from-transparent via-lime-200 to-transparent" aria-hidden="true"></div>
+                    <form method="POST" action="/?action=update_max_fenstertage" class="space-y-2">
+                        <label class="block text-sm font-semibold text-emerald-800" for="settings-max-fenstertage">
+                            <?= I18n::get('settings.max_fenstertage') ?>
+                            <span class="block text-xs font-normal text-emerald-600/80 mt-1"><?= I18n::get('settings.max_fenstertage_hint') ?></span>
+                        </label>
+                        <div class="flex items-end gap-3">
+                            <input id="settings-max-fenstertage" type="number" min="0" name="max_fenstertage" value="<?= (int)($maxFenstertage ?? 0) ?>" class="flex-1 w-full bg-[#fffdf2] border border-lime-200 rounded-xl px-4 py-3 text-sm text-emerald-900 outline-none focus:ring-2 focus:ring-lime-400">
+                            <button type="submit" class="et-btn-primary font-bold px-5 py-3 rounded-xl text-sm shrink-0"><?= I18n::get('ceo.save') ?></button>
                         </div>
-                        <button type="submit" class="et-btn-primary font-bold px-3 py-2 rounded-xl">✓</button>
                     </form>
                 </div>
             </div>
         <?php endif; ?>
         </main>
         </div>
+        </div>
+        <?php include __DIR__ . '/partials/mobile-bottom-nav.php'; ?>
     </div>
 
     <div id="export-modal" class="fixed inset-0 z-[120] hidden items-center justify-center bg-emerald-950/50 backdrop-blur-sm p-4">
@@ -1166,6 +1162,28 @@ if (!isset($currentRole)) exit;
         </div>
     </div>
 
+    <div id="admin-past-confirm-modal" class="fixed inset-0 z-[130] hidden items-center justify-center bg-emerald-950/40 backdrop-blur-md p-4" role="dialog" aria-modal="true" aria-labelledby="admin-past-confirm-title">
+        <div class="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-amber-200 p-6 sm:p-8">
+            <h3 id="admin-past-confirm-title" class="text-xl font-bold text-emerald-900 mb-2"><?= I18n::get('ceo.past_confirm_title') ?></h3>
+            <p class="text-sm text-emerald-700 leading-relaxed mb-6"><?= I18n::get('ceo.past_confirm_message') ?></p>
+            <div class="flex flex-wrap justify-end gap-3">
+                <button type="button" onclick="closeAdminPastConfirmModal()" class="et-btn-secondary px-5 py-3 rounded-xl text-sm font-bold"><?= I18n::get('ceo.past_confirm_cancel') ?></button>
+                <button type="button" onclick="confirmAdminPastAction()" class="bg-amber-500 hover:bg-amber-600 text-white px-5 py-3 rounded-xl text-sm font-bold transition-colors"><?= I18n::get('ceo.past_confirm_proceed') ?></button>
+            </div>
+        </div>
+    </div>
+
+    <div id="admin-dates-confirm-modal" class="fixed inset-0 z-[130] hidden items-center justify-center bg-emerald-950/40 backdrop-blur-md p-4" role="dialog" aria-modal="true" aria-labelledby="admin-dates-confirm-title">
+        <div class="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-amber-200 p-6 sm:p-8">
+            <h3 id="admin-dates-confirm-title" class="text-xl font-bold text-emerald-900 mb-2"><?= I18n::get('ceo.dates_changed_confirm_title') ?></h3>
+            <p id="admin-dates-confirm-message" class="text-sm text-emerald-700 leading-relaxed mb-6"></p>
+            <div class="flex flex-wrap justify-end gap-3">
+                <button type="button" onclick="closeAdminDatesConfirmModal()" class="et-btn-secondary px-5 py-3 rounded-xl text-sm font-bold"><?= I18n::get('ceo.past_confirm_cancel') ?></button>
+                <button type="button" onclick="confirmAdminDatesAction()" class="bg-amber-500 hover:bg-amber-600 text-white px-5 py-3 rounded-xl text-sm font-bold transition-colors"><?= I18n::get('ceo.past_confirm_proceed') ?></button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const fcEvents = <?= isset($fcEvents) ? json_encode($fcEvents) : '[]' ?>;
         const currentLang = '<?= $_SESSION['lang'] ?? 'de' ?>';
@@ -1179,7 +1197,249 @@ if (!isset($currentRole)) exit;
         let employeeCalendarInstance = null;
         let ceoSelectedRange = null;
         const ceoSelectionStorageKey = 'easytime_ceo_calendar_selection';
+        const ceoActionModeStorageKey = 'easytime_ceo_calendar_action_mode';
+        let ceoActionMode = 'vacation';
         let suppressEmpDateClick = false;
+        let suppressCeoDateClick = false;
+        let employeeSelectionSetAt = 0;
+        let ceoSelectionSetAt = 0;
+        let adminPastConfirmForm = null;
+        let adminDatesConfirmForm = null;
+        let adminDatesConfirmSubmitter = null;
+        const ceoDatesChangedPanelMsg = <?= json_encode(I18n::get('ceo.dates_changed_panel'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        const ceoDatesChangedPanelWunschMsg = <?= json_encode(I18n::get('ceo.dates_changed_panel_wunsch'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+
+        function isMobileLayout() {
+            return window.matchMedia('(max-width: 1023px)').matches;
+        }
+
+        function formatYmdDisplay(ymd) {
+            if (!ymd || ymd.length < 10) return ymd || '';
+            const parts = ymd.split('-');
+            if (parts.length !== 3) return ymd;
+            return parts[2] + '.' + parts[1] + '.' + parts[0];
+        }
+
+        window.addEventListener('resize', function () {
+            if (isMobileLayout()) {
+                const root = document.getElementById('ceo-employee-filter');
+                if (root?.classList.contains('is-pinned')) {
+                    syncCeoEmployeeFilterPinUi(root, false, null);
+                }
+            } else {
+                loadCeoEmployeeFilterPinState();
+            }
+        });
+        const ceoDatesChangedConfirmTitle = <?= json_encode(I18n::get('ceo.dates_changed_confirm_title'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        const ceoDatesChangedConfirmMsg = <?= json_encode(I18n::get('ceo.dates_changed_confirm_message'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        const empDatesChangedPanelMsg = <?= json_encode(I18n::get('emp.dates_changed_panel'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        const empDatesChangedConfirmTitle = <?= json_encode(I18n::get('emp.dates_changed_confirm_title'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        const empDatesChangedConfirmMsg = <?= json_encode(I18n::get('emp.dates_changed_confirm_message'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        const ceoActionSectionAdjust = <?= json_encode(I18n::get('ceo.action_section_adjust'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        const ceoActionSectionCancel = <?= json_encode(I18n::get('ceo.action_section_cancel'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        const ceoActionSectionDecide = <?= json_encode(I18n::get('ceo.action_section_decide'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        const ceoActionSectionChange = <?= json_encode(I18n::get('ceo.action_section_change'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        const ceoActionSectionStorno = <?= json_encode(I18n::get('ceo.action_section_storno'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        const empActionSectionChange = <?= json_encode(I18n::get('emp.action_section_change'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        const empActionSectionStorno = <?= json_encode(I18n::get('emp.action_section_storno'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        const empActionSectionRetract = <?= json_encode(I18n::get('emp.action_section_retract'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        const empActionSectionWithdrawStorno = <?= json_encode(I18n::get('emp.action_section_withdraw_storno'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        const empActionSectionWithdrawChange = <?= json_encode(I18n::get('emp.action_section_withdraw_change'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        const ceoEmployeeFilterStorageKey = 'easytime_ceo_employee_filter';
+        const ceoEmployeeFilterPinStorageKey = 'easytime_ceo_employee_filter_pinned';
+        const ceoEmployeeFilterPinLabel = <?= json_encode(I18n::get('ceo.employee_filter_pin'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        const ceoEmployeeFilterUnpinLabel = <?= json_encode(I18n::get('ceo.employee_filter_unpin'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        const ceoEmployeeFilterSummaryAll = <?= json_encode(I18n::get('ceo.employee_filter_summary_all'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        const ceoEmployeeFilterSummaryCount = <?= json_encode(I18n::get('ceo.employee_filter_summary_count'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        const ceoEmployeeFilterBadgeAll = <?= json_encode(I18n::get('ceo.employee_filter_badge_all'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        const ceoEmployeeFilterBadgeCount = <?= json_encode(I18n::get('ceo.employee_filter_badge_count'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        function formatAdminDateRange(startYmd, endYmd) {
+            if (!startYmd || !endYmd) return '';
+            const fmt = function(ymd) {
+                const p = ymd.split('-');
+                return p.length === 3 ? (p[2] + '.' + p[1] + '.' + p[0]) : ymd;
+            };
+            return fmt(startYmd) + ' – ' + fmt(endYmd);
+        }
+
+        function getDatesFormInputs(form) {
+            return {
+                start: form.querySelector('[name="approved_start_date"], [name="start_date"], [name="new_start_date"]'),
+                end: form.querySelector('[name="approved_end_date"], [name="end_date"], [name="new_end_date"]'),
+            };
+        }
+
+        function datesFormChanged(form) {
+            const originalStart = form.dataset.originalStart || '';
+            const originalEnd = form.dataset.originalEnd || '';
+            const inputs = getDatesFormInputs(form);
+            if (!inputs.start || !inputs.end) return false;
+            return inputs.start.value !== originalStart || inputs.end.value !== originalEnd;
+        }
+
+        function updateDatesFormWarning(form) {
+            const warningEl = form.querySelector('.admin-dates-warning, .employee-dates-warning');
+            if (!warningEl) return;
+            const changed = datesFormChanged(form);
+            warningEl.classList.toggle('hidden', !changed);
+        }
+
+        function needsDatesConfirmOnSubmit(form, submitter) {
+            if (form.action.includes('admin_modify_vacation')) return true;
+            if (form.action.includes('request_change')) return true;
+            if (!submitter) return false;
+            const value = submitter.value || '';
+            if (form.action.includes('decide_change_request')) return value === 'approve';
+            if (form.action.includes('decide_request')) return value === 'approved';
+            return false;
+        }
+
+        function wireDatesChangeForm(form) {
+            if (form.dataset.datesWired === '1') return;
+            form.dataset.datesWired = '1';
+            const inputs = getDatesFormInputs(form);
+            const onChange = function() { updateDatesFormWarning(form); };
+            inputs.start?.addEventListener('change', onChange);
+            inputs.end?.addEventListener('change', onChange);
+            updateDatesFormWarning(form);
+            form.addEventListener('submit', function(e) {
+                const submitter = e.submitter;
+                if (!needsDatesConfirmOnSubmit(form, submitter)) return;
+                if (!datesFormChanged(form)) return;
+                if (form.dataset.confirmed === '1') {
+                    form.dataset.confirmed = '';
+                    return;
+                }
+                e.preventDefault();
+                openDatesConfirmModal(form, submitter);
+            });
+        }
+
+        function wireDatesChangeForms(root) {
+            (root || document).querySelectorAll('.admin-dates-form, .employee-dates-form').forEach(wireDatesChangeForm);
+        }
+        window.wireDatesChangeForm = wireDatesChangeForm;
+        window.wireDatesChangeForms = wireDatesChangeForms;
+
+        function openDatesConfirmModal(form, submitter) {
+            adminDatesConfirmForm = form;
+            adminDatesConfirmSubmitter = submitter || null;
+            const modal = document.getElementById('admin-dates-confirm-modal');
+            const titleEl = document.getElementById('admin-dates-confirm-title');
+            const messageEl = document.getElementById('admin-dates-confirm-message');
+            const isEmployeeForm = form.classList.contains('employee-dates-form') || form.action.includes('request_change');
+            const defaultTitle = isEmployeeForm ? empDatesChangedConfirmTitle : ceoDatesChangedConfirmTitle;
+            const defaultMessage = isEmployeeForm ? empDatesChangedConfirmMsg : ceoDatesChangedConfirmMsg;
+            if (titleEl) {
+                titleEl.textContent = form.dataset.confirmTitle || defaultTitle;
+            }
+            if (messageEl) {
+                const inputs = getDatesFormInputs(form);
+                const original = formatAdminDateRange(form.dataset.originalStart || '', form.dataset.originalEnd || '');
+                const approved = formatAdminDateRange(inputs.start?.value || '', inputs.end?.value || '');
+                const template = form.dataset.confirmMessage || defaultMessage;
+                messageEl.textContent = template
+                    .replace('{original}', original)
+                    .replace('{approved}', approved);
+            }
+            if (!modal) return;
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeAdminDatesConfirmModal() {
+            adminDatesConfirmForm = null;
+            adminDatesConfirmSubmitter = null;
+            const modal = document.getElementById('admin-dates-confirm-modal');
+            if (!modal) return;
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function confirmAdminDatesAction() {
+            if (!adminDatesConfirmForm) return;
+            adminDatesConfirmForm.dataset.confirmed = '1';
+            if (adminDatesConfirmSubmitter && typeof adminDatesConfirmForm.requestSubmit === 'function') {
+                adminDatesConfirmForm.requestSubmit(adminDatesConfirmSubmitter);
+            } else {
+                adminDatesConfirmForm.submit();
+            }
+            closeAdminDatesConfirmModal();
+        }
+
+        function buildActionPickerPanel(actions, defaultId) {
+            if (!actions || actions.length === 0) return '';
+            if (actions.length === 1) {
+                return actions[0].bodyHtml;
+            }
+
+            const activeId = defaultId || actions[0].id;
+            const pickerButtons = actions.map(function(action) {
+                const isActive = action.id === activeId;
+                const btnClass = isActive ? 'et-btn-primary' : 'et-btn-secondary';
+                return `<button type="button" class="et-action-picker-btn ${btnClass} py-2 rounded-xl text-sm font-bold" data-action-id="${action.id}">${action.label}</button>`;
+            }).join('');
+
+            const panels = actions.map(function(action) {
+                const hidden = action.id !== activeId ? ' hidden' : '';
+                return `<div class="et-action-panel space-y-4${hidden}" data-action-id="${action.id}">${action.bodyHtml}</div>`;
+            }).join('');
+
+            return `<div class="et-action-picker space-y-4">
+                <div class="grid grid-cols-2 gap-2 calendar-action-mode-picker">${pickerButtons}</div>
+                ${panels}
+            </div>`;
+        }
+
+        function wireActionPicker(root) {
+            (root || document).querySelectorAll('.et-action-picker').forEach(function(picker) {
+                if (picker.dataset.wired === '1') return;
+                picker.dataset.wired = '1';
+                picker.querySelectorAll('.et-action-picker-btn').forEach(function(btn) {
+                    btn.addEventListener('click', function() {
+                        const id = btn.dataset.actionId;
+                        picker.querySelectorAll('.et-action-picker-btn').forEach(function(b) {
+                            const active = b === btn;
+                            b.classList.toggle('et-btn-primary', active);
+                            b.classList.toggle('et-btn-secondary', !active);
+                        });
+                        picker.querySelectorAll('.et-action-panel').forEach(function(panel) {
+                            panel.classList.toggle('hidden', panel.dataset.actionId !== id);
+                        });
+                        wireDatesChangeForms(picker);
+                    });
+                });
+            });
+        }
+
+        function buildAdminDatesWarningHtml(message) {
+            return `<div class="admin-dates-warning hidden rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium leading-snug text-amber-900" role="alert">${message}</div>`;
+        }
+
+        function buildEmployeeDatesWarningHtml(message) {
+            return `<div class="employee-dates-warning hidden rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium leading-snug text-amber-900" role="alert">${message}</div>`;
+        }
+
+        function buildAdminDateFields(startVal, endVal, startName, endName, fromLabel, toLabel) {
+            return `
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-xs font-semibold text-emerald-800 mb-1">${fromLabel}</label>
+                        <input type="date" name="${startName}" value="${startVal}" class="w-full bg-[#fffdf2] border border-lime-200 rounded-xl px-3 py-2 text-sm text-emerald-900 outline-none focus:ring-2 focus:ring-lime-400">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-emerald-800 mb-1">${toLabel}</label>
+                        <input type="date" name="${endName}" value="${endVal}" class="w-full bg-[#fffdf2] border border-lime-200 rounded-xl px-3 py-2 text-sm text-emerald-900 outline-none focus:ring-2 focus:ring-lime-400">
+                    </div>
+                </div>`;
+        }
+
+        const ceoPastRangeInfo = <?= json_encode(I18n::get('ceo.past_range_info'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        const ceoValidationSelectEmployee = <?= json_encode(I18n::get('ceo.validation_select_employee'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        const ceoValidationSelectRange = <?= json_encode(I18n::get('ceo.validation_select_range'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        const ceoValidationInvalidRange = <?= json_encode(I18n::get('ceo.validation_invalid_range'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        const msgBlockedPeriod = <?= json_encode(I18n::get('msg.blocked_period'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        const msgRequestConflict = <?= json_encode(I18n::get('msg.request_conflict'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
         let employeeRangeAnchor = null;
         const todayYmd = '<?= date('Y-m-d') ?>';
         const employeeVacationRemaining = <?= ($currentRole === 'Employee') ? (int)($userVacationStats['remaining'] ?? 0) : 0 ?>;
@@ -1192,25 +1452,334 @@ if (!isset($currentRole)) exit;
         const empNoBalanceZero = <?= json_encode(I18n::get('emp.no_balance_zero'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
         const empNoBalanceExceeded = <?= json_encode(I18n::get('emp.no_balance_exceeded'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
         const showCancelledVacationKey = 'easytime_employee_show_cancelled';
+        const showCancelledCeoKey = 'easytime_ceo_show_cancelled';
 
-        function isShowCancelledVacationEnabled() {
-            return localStorage.getItem(showCancelledVacationKey) === '1';
+        function isShowCancelledVacationEnabled(calendarId) {
+            const key = calendarId === 'ceo-calendar' ? showCancelledCeoKey : showCancelledVacationKey;
+            return localStorage.getItem(key) === '1';
         }
 
         function shouldHideCancelledEvent(calendarId, status) {
             if (status !== 'cancelled') return false;
-            if (calendarId === 'ceo-calendar') return true;
-            if (calendarId === 'employee-calendar') return !isShowCancelledVacationEnabled();
-            return true;
+            return !isShowCancelledVacationEnabled(calendarId);
         }
 
         function applyCancelledVacationVisibility(calendarRootId) {
-            if (calendarRootId !== 'employee-calendar') return;
-            const show = isShowCancelledVacationEnabled();
-            document.getElementById('employee-calendar')?.querySelectorAll('.fc-event[data-status="cancelled"]').forEach((el) => {
-                el.style.display = show ? '' : 'none';
+            const show = isShowCancelledVacationEnabled(calendarRootId);
+            document.getElementById(calendarRootId)?.querySelectorAll('.fc-event[data-status="cancelled"]').forEach((el) => {
+                let visible = show;
+                if (calendarRootId === 'ceo-calendar') {
+                    const userId = el.getAttribute('data-user-id');
+                    if (userId && !isCeoUserVisible(userId)) {
+                        visible = false;
+                    }
+                }
+                el.style.display = visible ? '' : 'none';
             });
         }
+
+        function measureCeoEmployeeFilterAnchor() {
+            const root = document.getElementById('ceo-employee-filter');
+            const anchor = document.getElementById('ceo-employee-filter-anchor');
+            if (!root || !anchor) return null;
+            const rect = anchor.getBoundingClientRect();
+            return {
+                top: rect.top,
+                left: rect.left,
+                width: rect.width,
+                height: root.offsetHeight,
+            };
+        }
+
+        function applyCeoEmployeeFilterPinLayout(pinGeometry) {
+            const root = document.getElementById('ceo-employee-filter');
+            const anchor = document.getElementById('ceo-employee-filter-anchor');
+            if (!root || !anchor) return;
+
+            if (!root.classList.contains('is-pinned')) {
+                anchor.style.minHeight = '';
+                root.style.removeProperty('--et-ceo-filter-left');
+                root.style.removeProperty('--et-ceo-filter-width');
+                root.style.removeProperty('--et-ceo-filter-top');
+                return;
+            }
+
+            if (pinGeometry) {
+                anchor.style.minHeight = pinGeometry.height + 'px';
+                root.style.setProperty('--et-ceo-filter-top', pinGeometry.top + 'px');
+                root.style.setProperty('--et-ceo-filter-left', pinGeometry.left + 'px');
+                root.style.setProperty('--et-ceo-filter-width', pinGeometry.width + 'px');
+                return;
+            }
+
+            const existingTop = root.style.getPropertyValue('--et-ceo-filter-top');
+            if (!existingTop) {
+                root.classList.remove('is-pinned');
+                anchor.style.minHeight = '';
+                const measured = measureCeoEmployeeFilterAnchor();
+                root.classList.add('is-pinned');
+                if (!measured) return;
+                anchor.style.minHeight = measured.height + 'px';
+                root.style.setProperty('--et-ceo-filter-top', measured.top + 'px');
+                root.style.setProperty('--et-ceo-filter-left', measured.left + 'px');
+                root.style.setProperty('--et-ceo-filter-width', measured.width + 'px');
+                return;
+            }
+
+            const rect = anchor.getBoundingClientRect();
+            const height = parseInt(anchor.style.minHeight, 10) || root.offsetHeight || 0;
+            anchor.style.minHeight = height + 'px';
+            root.style.setProperty('--et-ceo-filter-left', rect.left + 'px');
+            root.style.setProperty('--et-ceo-filter-width', rect.width + 'px');
+        }
+
+        function syncCeoEmployeeFilterPinUi(root, pinned, pinGeometry) {
+            const pinBtn = document.getElementById('ceo-employee-filter-pin-btn');
+            if (!root) return;
+            root.classList.toggle('is-pinned', pinned);
+            if (pinBtn) {
+                pinBtn.classList.toggle('is-active', pinned);
+                pinBtn.setAttribute('aria-pressed', pinned ? 'true' : 'false');
+                pinBtn.title = pinned ? ceoEmployeeFilterUnpinLabel : ceoEmployeeFilterPinLabel;
+                pinBtn.setAttribute('aria-label', pinned ? ceoEmployeeFilterUnpinLabel : ceoEmployeeFilterPinLabel);
+            }
+            applyCeoEmployeeFilterPinLayout(pinGeometry);
+        }
+
+        function loadCeoEmployeeFilterPinState() {
+            const root = document.getElementById('ceo-employee-filter');
+            if (!root) return;
+            let pinned = false;
+            if (!isMobileLayout()) {
+                try {
+                    pinned = localStorage.getItem(ceoEmployeeFilterPinStorageKey) === '1';
+                } catch (e) {}
+            }
+            const pinGeometry = pinned ? measureCeoEmployeeFilterAnchor() : null;
+            syncCeoEmployeeFilterPinUi(root, pinned, pinGeometry);
+        }
+
+        function toggleCeoEmployeeFilterPin() {
+            if (isMobileLayout()) return;
+            const root = document.getElementById('ceo-employee-filter');
+            if (!root) return;
+            const pinned = !root.classList.contains('is-pinned');
+            const pinGeometry = pinned ? measureCeoEmployeeFilterAnchor() : null;
+            try {
+                localStorage.setItem(ceoEmployeeFilterPinStorageKey, pinned ? '1' : '0');
+            } catch (e) {}
+            syncCeoEmployeeFilterPinUi(root, pinned, pinGeometry);
+        }
+
+        function getCeoEmployeeFilterSelectedIds() {
+            const boxes = document.querySelectorAll('.ceo-employee-filter-cb:checked');
+            if (!boxes.length) return null;
+            return new Set(Array.from(boxes, (cb) => String(cb.value)));
+        }
+
+        function isCeoUserVisible(userId) {
+            const selected = getCeoEmployeeFilterSelectedIds();
+            if (!selected) return true;
+            return selected.has(String(userId));
+        }
+
+        function saveCeoEmployeeFilterSelection() {
+            const selected = getCeoEmployeeFilterSelectedIds();
+            if (!selected) {
+                localStorage.removeItem(ceoEmployeeFilterStorageKey);
+                return;
+            }
+            localStorage.setItem(ceoEmployeeFilterStorageKey, JSON.stringify(Array.from(selected)));
+        }
+
+        function loadCeoEmployeeFilterSelection() {
+            const raw = localStorage.getItem(ceoEmployeeFilterStorageKey);
+            if (!raw) return;
+            try {
+                const ids = JSON.parse(raw);
+                if (!Array.isArray(ids)) return;
+                const idSet = new Set(ids.map(String));
+                document.querySelectorAll('.ceo-employee-filter-cb').forEach((cb) => {
+                    cb.checked = idSet.has(String(cb.value));
+                });
+            } catch (e) {
+                localStorage.removeItem(ceoEmployeeFilterStorageKey);
+            }
+        }
+
+        function updateCeoEmployeeFilterSummary() {
+            const summary = document.getElementById('ceo-employee-filter-summary');
+            if (!summary) return;
+            const total = document.querySelectorAll('.ceo-employee-filter-cb').length;
+            const selected = getCeoEmployeeFilterSelectedIds();
+            if (!selected) {
+                summary.textContent = ceoEmployeeFilterBadgeAll;
+                summary.title = ceoEmployeeFilterSummaryAll;
+                return;
+            }
+            summary.textContent = ceoEmployeeFilterBadgeCount.replace('{count}', String(selected.size));
+            summary.title = ceoEmployeeFilterSummaryCount
+                .replace('{count}', String(selected.size))
+                .replace('{total}', String(total));
+        }
+
+        function setCeoEmployeeFilterDropdownOpen(open) {
+            const panel = document.getElementById('ceo-employee-filter-dropdown');
+            const toggle = document.getElementById('ceo-employee-filter-toggle');
+            if (!panel || !toggle) return;
+            panel.classList.toggle('hidden', !open);
+            toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        }
+
+        function toggleCeoEmployeeFilterDropdown() {
+            const panel = document.getElementById('ceo-employee-filter-dropdown');
+            if (!panel) return;
+            const willOpen = panel.classList.contains('hidden');
+            setCeoEmployeeFilterDropdownOpen(willOpen);
+            if (willOpen) {
+                filterCeoEmployeeFilterList();
+                window.setTimeout(function() {
+                    document.getElementById('ceo-employee-filter-search')?.focus();
+                }, 0);
+            }
+        }
+
+        function filterCeoEmployeeFilterList() {
+            const q = (document.getElementById('ceo-employee-filter-search')?.value ?? '').trim().toLowerCase();
+            const terms = q ? q.split(/\s+/).filter(Boolean) : [];
+            document.querySelectorAll('.ceo-employee-filter-item').forEach((item) => {
+                const name = item.dataset.employeeName || '';
+                const visible = terms.length === 0 || terms.every((term) => name.includes(term));
+                item.classList.toggle('hidden', !visible);
+            });
+        }
+
+        function syncCeoVacationEmployeeDropdown() {
+            const select = document.getElementById('admin-vacation-user');
+            if (!select) return;
+            const selected = getCeoEmployeeFilterSelectedIds();
+            let firstVisible = '';
+            Array.from(select.options).forEach((opt) => {
+                if (!opt.value) return;
+                const show = !selected || selected.has(String(opt.value));
+                opt.hidden = !show;
+                opt.disabled = !show;
+                if (show && !firstVisible) firstVisible = opt.value;
+            });
+            if (select.value && select.options[select.selectedIndex]?.disabled) {
+                select.value = firstVisible;
+            } else if (selected && selected.size === 1) {
+                select.value = Array.from(selected)[0];
+            }
+        }
+
+        function applyCeoEmployeeFilterToCalendar() {
+            if (!ceoCalendarInstance) return;
+            ceoCalendarInstance.getEvents().forEach((ev) => {
+                if (ev.extendedProps?.isBlocked) return;
+                const userId = ev.extendedProps?.userId;
+                if (userId == null) return;
+                const show = isCeoUserVisible(userId);
+                ev.setProp('display', show ? 'auto' : 'none');
+                const requestId = ev.extendedProps?.requestId;
+                if (requestId) {
+                    const el = document.querySelector('#ceo-calendar .fc-event[data-request-id="' + requestId + '"]');
+                    if (el && ev.extendedProps.status !== 'cancelled') {
+                        el.style.display = show ? '' : 'none';
+                    }
+                }
+            });
+            applyCancelledVacationVisibility('ceo-calendar');
+        }
+
+        function applyCeoEmployeeFilterToCards() {
+            [
+                { grid: 'ceo-grid-change', empty: 'ceo-filter-empty-change' },
+                { grid: 'ceo-grid-vacation', empty: 'ceo-filter-empty-vacation' },
+                { grid: 'ceo-grid-storno', empty: 'ceo-filter-empty-storno' },
+            ].forEach(({ grid, empty }) => {
+                const gridEl = document.getElementById(grid);
+                if (!gridEl) return;
+                let visibleCount = 0;
+                gridEl.querySelectorAll('.ceo-filterable-card').forEach((card) => {
+                    const show = isCeoUserVisible(card.dataset.userId);
+                    card.classList.toggle('hidden', !show);
+                    if (show) visibleCount++;
+                });
+                const emptyEl = document.getElementById(empty);
+                if (emptyEl) {
+                    emptyEl.classList.toggle('hidden', visibleCount > 0);
+                    gridEl.classList.toggle('hidden', visibleCount === 0);
+                }
+            });
+        }
+
+        function applyCeoEmployeeFilter() {
+            updateCeoEmployeeFilterSummary();
+            filterCeoEmployeeFilterList();
+            applyCeoEmployeeFilterToCalendar();
+            applyCeoEmployeeFilterToCards();
+            syncCeoVacationEmployeeDropdown();
+            if (document.getElementById('req-search-tbody')) {
+                filterRequests();
+            }
+            window.dispatchEvent(new CustomEvent('easytime:ceo-employee-filter-changed'));
+        }
+
+        let ceoEmployeeFilterInitialized = false;
+
+        function resetCeoEmployeeFilter() {
+            document.querySelectorAll('.ceo-employee-filter-cb').forEach((cb) => { cb.checked = false; });
+            const search = document.getElementById('ceo-employee-filter-search');
+            if (search) search.value = '';
+            saveCeoEmployeeFilterSelection();
+            setCeoEmployeeFilterDropdownOpen(false);
+            applyCeoEmployeeFilter();
+        }
+
+        function initCeoEmployeeFilter() {
+            const root = document.getElementById('ceo-employee-filter');
+            if (!root) return;
+            if (ceoEmployeeFilterInitialized) {
+                loadCeoEmployeeFilterSelection();
+                loadCeoEmployeeFilterPinState();
+                applyCeoEmployeeFilter();
+                return;
+            }
+            ceoEmployeeFilterInitialized = true;
+            loadCeoEmployeeFilterSelection();
+            loadCeoEmployeeFilterPinState();
+            window.addEventListener('resize', applyCeoEmployeeFilterPinLayout);
+            document.getElementById('ceo-employee-filter-pin-btn')?.addEventListener('click', function(e) {
+                e.stopPropagation();
+                toggleCeoEmployeeFilterPin();
+            });
+            document.getElementById('ceo-employee-filter-reset-btn')?.addEventListener('click', resetCeoEmployeeFilter);
+            document.getElementById('ceo-employee-filter-toggle')?.addEventListener('click', function(e) {
+                e.stopPropagation();
+                toggleCeoEmployeeFilterDropdown();
+            });
+            document.getElementById('ceo-employee-filter-search')?.addEventListener('input', filterCeoEmployeeFilterList);
+            document.getElementById('ceo-employee-filter-search')?.addEventListener('search', filterCeoEmployeeFilterList);
+            document.addEventListener('click', function(e) {
+                const panel = document.getElementById('ceo-employee-filter-dropdown');
+                if (!panel || panel.classList.contains('hidden')) return;
+                if (!root.contains(e.target)) {
+                    setCeoEmployeeFilterDropdownOpen(false);
+                }
+            });
+            root.querySelectorAll('.ceo-employee-filter-cb').forEach((cb) => {
+                cb.addEventListener('change', function() {
+                    saveCeoEmployeeFilterSelection();
+                    applyCeoEmployeeFilter();
+                });
+            });
+            applyCeoEmployeeFilter();
+        }
+
+        window.applyCeoEmployeeFilterPinLayout = applyCeoEmployeeFilterPinLayout;
+
+        window.getCeoEmployeeFilterSelectedIds = getCeoEmployeeFilterSelectedIds;
 
         function addDaysYmd(ymd, days) {
             const d = new Date(ymd + 'T12:00:00');
@@ -1254,7 +1823,7 @@ if (!isset($currentRole)) exit;
         }
 
         const employeeOccupiedRanges = requestLookup
-            .filter((r) => ['pending', 'approved', 'storno_requested'].includes(r.status))
+            .filter((r) => ['pending', 'approved', 'storno_requested', 'change_requested'].includes(r.status))
             .map((r) => ({ start: r.start_date, end: addDaysYmd(r.end_date, 1) }));
 
         function isYmdInOccupiedRange(ymd) {
@@ -1293,10 +1862,71 @@ if (!isset($currentRole)) exit;
             return !!(issue && issue.type === 'no_balance');
         }
 
+        function rangesOverlapExclusive(startA, endExclusiveA, startB, endExclusiveB) {
+            return startA < endExclusiveB && endExclusiveA > startB;
+        }
+
+        function getAdminVacationRangeValues() {
+            const start = document.getElementById('admin-range-start-date')?.value
+                || document.getElementById('vacation-form-start-date')?.value
+                || '';
+            const end = document.getElementById('admin-range-end-date')?.value
+                || document.getElementById('vacation-form-end-date')?.value
+                || '';
+            return { start, end };
+        }
+
+        function getAdminVacationValidationIssue() {
+            const userId = document.getElementById('admin-vacation-user')?.value || '';
+            const { start, end } = getAdminVacationRangeValues();
+
+            if (!start || !end) {
+                return { code: 'select_range', message: ceoValidationSelectRange };
+            }
+            if (compareYmd(start, end) > 0) {
+                return { code: 'invalid_range', message: ceoValidationInvalidRange };
+            }
+            if (!userId) {
+                return { code: 'select_employee', message: ceoValidationSelectEmployee };
+            }
+
+            const endExclusive = addDaysYmd(end, 1);
+            if (hasBlockedOverlap(start, endExclusive)) {
+                return { code: 'blocked_period', message: msgBlockedPeriod };
+            }
+
+            const hasConflict = requestLookup.some(function(r) {
+                if (String(r.user_id) !== String(userId)) return false;
+                if (!['pending', 'approved', 'storno_requested', 'change_requested'].includes(r.status)) return false;
+                return rangesOverlapExclusive(
+                    start,
+                    endExclusive,
+                    r.start_date,
+                    addDaysYmd(r.end_date, 1)
+                );
+            });
+            if (hasConflict) {
+                return { code: 'request_conflict', message: msgRequestConflict };
+            }
+            return null;
+        }
+
+        function updateAdminVacationValidation() {
+            const form = document.getElementById('calendar-action-vacation-form');
+            const submitBtn = document.getElementById('admin-vacation-submit-btn');
+            if (!form || !submitBtn || form.classList.contains('hidden')) return;
+
+            const issue = getAdminVacationValidationIssue();
+            submitBtn.disabled = !!issue;
+            submitBtn.classList.toggle('opacity-50', !!issue);
+            submitBtn.classList.toggle('cursor-not-allowed', !!issue);
+        }
+
         const calendarSelection = {
             'employee-calendar': { type: null, start: null, end: null, requestId: null },
             'ceo-calendar': { type: null, start: null, end: null, requestId: null }
         };
+        const crossMonthDragByCalendarId = {};
         
         document.addEventListener('DOMContentLoaded', function() {
             function formatLocalDate(dateObj) {
@@ -1357,18 +1987,48 @@ if (!isset($currentRole)) exit;
                 });
             }
 
+            function formatPanelDateRange(startYmd, endInclusiveYmd) {
+                function fmt(ymd) {
+                    const p = ymd.split('-');
+                    return p.length === 3 ? `${p[2]}.${p[1]}.${p[0]}` : ymd;
+                }
+                return fmt(startYmd) + ' – ' + fmt(endInclusiveYmd);
+            }
+
+            function showEmployeeRangeSection(startYmd, endInclusiveYmd, options = {}) {
+                const { readonly = false } = options;
+                const summary = document.getElementById('employee-calendar-range-summary');
+                if (summary) {
+                    summary.textContent = formatPanelDateRange(startYmd, endInclusiveYmd);
+                }
+                document.getElementById('employee-calendar-range-empty')?.classList.add('hidden');
+                document.getElementById('employee-calendar-range-content')?.classList.remove('hidden');
+                const inputs = document.getElementById('employee-calendar-range-inputs');
+                if (inputs) {
+                    inputs.classList.toggle('hidden', readonly);
+                }
+            }
+
+            function clearEmployeeRangeSection() {
+                const summary = document.getElementById('employee-calendar-range-summary');
+                if (summary) summary.textContent = '';
+                document.getElementById('employee-calendar-range-empty')?.classList.remove('hidden');
+                document.getElementById('employee-calendar-range-content')?.classList.add('hidden');
+                document.getElementById('employee-calendar-range-inputs')?.classList.remove('hidden');
+            }
+
             function updateEmployeeRangeSelectionUi(startYmd, endExclusiveYmd) {
                 const endInclusive = addDaysYmd(endExclusiveYmd, -1);
-                const isSingle = startYmd === endInclusive;
                 const issue = getEmployeeSelectionIssue(startYmd, endExclusiveYmd);
                 const days = eachDayInRangeExclusive(startYmd, endExclusiveYmd).length;
 
+                showEmployeeRangeSection(startYmd, endInclusive);
+
                 renderEmployeeInfoPanel({
-                    eyebrow: isSingle ? 'Tag' : 'Zeitraum',
-                    range: formatEmployeeDateRange(startYmd, endInclusive),
+                    eyebrow: issue ? '' : '<?= I18n::get('emp.days_deduct') ?>',
                     statusLabel: issue ? empUnbookableInfo : '',
                     statusClass: issue ? 'bg-red-100 text-red-800 border-red-200' : '',
-                    days,
+                    days: issue ? null : days,
                     note: issue ? issue.message : '',
                     isWarning: !!issue
                 });
@@ -1433,6 +2093,7 @@ if (!isset($currentRole)) exit;
                     approved: 'bg-green-100 text-green-800 border-green-200',
                     pending: 'bg-amber-100 text-amber-900 border-amber-200',
                     storno_requested: 'bg-orange-100 text-orange-900 border-orange-300',
+                    change_requested: 'bg-violet-100 text-violet-900 border-violet-300',
                     rejected: 'bg-red-100 text-red-800 border-red-200',
                     cancelled: 'bg-gray-100 text-gray-600 border-gray-200'
                 };
@@ -1465,7 +2126,7 @@ if (!isset($currentRole)) exit;
 
                 body.innerHTML = `
                     ${eyebrow ? `<div class="text-xs font-bold uppercase tracking-[0.2em] text-emerald-500">${eyebrow}</div>` : ''}
-                    <div class="text-2xl sm:text-[1.65rem] font-bold text-emerald-900 leading-tight tracking-tight">${range}</div>
+                    ${range ? `<div class="text-2xl sm:text-[1.65rem] font-bold text-emerald-900 leading-tight tracking-tight">${range}</div>` : ''}
                     ${statusLabel ? `<span class="inline-flex px-3 py-1.5 rounded-full text-sm font-bold border ${statusClass}">${statusLabel}</span>` : ''}
                     ${daysHtml}
                     ${note ? `<p class="text-sm leading-relaxed ${isWarning ? 'text-red-700' : 'text-emerald-600'}">${note}</p>` : ''}
@@ -1487,10 +2148,12 @@ if (!isset($currentRole)) exit;
                 calendarSelection['employee-calendar'] = { type: null, start: null, end: null, requestId: null };
                 clearRangeVisual('employee-calendar');
                 clearEventVisual('employee-calendar');
+                getCalendarInstanceById('employee-calendar')?.unselect();
                 const infoBody = document.getElementById('employee-calendar-info-body');
                 if (infoBody) infoBody.innerHTML = '';
                 const actionBody = document.getElementById('employee-selected-event-actions');
                 if (actionBody) actionBody.innerHTML = '';
+                clearEmployeeRangeSection();
                 document.getElementById('employee-calendar-info-empty')?.classList.remove('hidden');
                 document.getElementById('employee-calendar-info-content')?.classList.add('hidden');
                 document.getElementById('employee-calendar-action-empty')?.classList.remove('hidden');
@@ -1511,6 +2174,86 @@ if (!isset($currentRole)) exit;
                 }
             }
 
+            function clearCeoCalendarSelection() {
+                ceoSelectedRange = null;
+                try {
+                    localStorage.removeItem(ceoSelectionStorageKey);
+                } catch (e) {
+                    // ignore storage errors
+                }
+                calendarSelection['ceo-calendar'] = { type: null, start: null, end: null, requestId: null };
+                clearRangeVisual('ceo-calendar');
+                clearEventVisual('ceo-calendar');
+                getCalendarInstanceById('ceo-calendar')?.unselect();
+
+                const rangeSummary = document.getElementById('calendar-range-summary');
+                if (rangeSummary) {
+                    rangeSummary.textContent = '';
+                    rangeSummary.classList.add('hidden');
+                }
+                document.getElementById('calendar-range-hint')?.classList.remove('hidden');
+                document.getElementById('calendar-range-inputs')?.classList.remove('hidden');
+
+                const adminStart = document.getElementById('admin-range-start-date');
+                const adminEnd = document.getElementById('admin-range-end-date');
+                if (adminStart) adminStart.value = '';
+                if (adminEnd) adminEnd.value = '';
+
+                const eventInfo = document.getElementById('calendar-info-event-body');
+                if (eventInfo) {
+                    eventInfo.innerHTML = '';
+                    eventInfo.classList.add('hidden');
+                }
+                const eventActions = document.getElementById('calendar-event-actions');
+                if (eventActions) eventActions.innerHTML = '';
+                document.getElementById('calendar-info-empty')?.classList.remove('hidden');
+                document.getElementById('calendar-info-content')?.classList.add('hidden');
+
+                document.getElementById('calendar-action-empty')?.classList.remove('hidden');
+                document.getElementById('calendar-action-range-wrapper')?.classList.add('hidden');
+                document.getElementById('calendar-action-block-form')?.classList.add('hidden');
+                document.getElementById('calendar-action-vacation-form')?.classList.add('hidden');
+                document.getElementById('calendar-action-unblock')?.classList.add('hidden');
+                document.getElementById('calendar-action-event')?.classList.add('hidden');
+                syncAdminRangeToForms();
+            }
+
+            function handleCeoDateClick(dateStr) {
+                const endExclusive = addDaysYmd(dateStr, 1);
+                const sel = calendarSelection['ceo-calendar'];
+
+                if (sel.type === 'range' && sel.start && sel.end && isYmdInRange(dateStr, sel.start, sel.end)) {
+                    const endInclusive = addDaysYmd(sel.end, -1);
+                    if (dateStr === sel.start && dateStr === endInclusive) {
+                        if (Date.now() - ceoSelectionSetAt < 400) return;
+                        clearCeoCalendarSelection();
+                        return;
+                    }
+                    if (dateStr === sel.start) {
+                        const newStart = addDaysYmd(sel.start, 1);
+                        if (newStart >= sel.end) {
+                            clearCeoCalendarSelection();
+                            return;
+                        }
+                        applyCeoSelection({ start: newStart, end: sel.end }, true);
+                        return;
+                    }
+                    if (dateStr === endInclusive) {
+                        const newEndExclusive = dateStr;
+                        if (sel.start >= newEndExclusive) {
+                            clearCeoCalendarSelection();
+                            return;
+                        }
+                        applyCeoSelection({ start: sel.start, end: newEndExclusive }, true);
+                        return;
+                    }
+                    applyCeoSelection({ start: dateStr, end: endExclusive }, true);
+                    return;
+                }
+
+                applyCeoSelection({ start: dateStr, end: endExclusive }, true);
+            }
+
             function handleEmployeeDateClick(dateStr) {
                 const endExclusive = addDaysYmd(dateStr, 1);
 
@@ -1518,6 +2261,7 @@ if (!isset($currentRole)) exit;
                 if (sel.type === 'range' && sel.start && sel.end && isYmdInRange(dateStr, sel.start, sel.end)) {
                     const endInclusive = addDaysYmd(sel.end, -1);
                     if (dateStr === sel.start && dateStr === endInclusive) {
+                        if (Date.now() - employeeSelectionSetAt < 400) return;
                         clearEmployeeCalendarSelection();
                         return;
                     }
@@ -1561,6 +2305,7 @@ if (!isset($currentRole)) exit;
                 clearRangeVisual(calendarId);
                 applyRangeVisual(calendarId, startYmd, endExclusiveYmd, syncFcSelect !== false);
                 if (calendarId === 'employee-calendar') {
+                    employeeSelectionSetAt = Date.now();
                     showEmployeeRangePanel(startYmd, endExclusiveYmd);
                 }
             }
@@ -1581,14 +2326,36 @@ if (!isset($currentRole)) exit;
                 }
             }
 
+            function getViewMonthBoundsYmd(calendar) {
+                const d = calendar.getDate();
+                const y = d.getFullYear();
+                const m = d.getMonth();
+                return {
+                    start: formatLocalDate(new Date(y, m, 1)),
+                    end: formatLocalDate(new Date(y, m + 1, 0)),
+                };
+            }
+
             function attachCrossMonthDrag(calendar, calendarEl, onCommitRange) {
                 if (!calendar || !calendarEl) return;
-                const EDGE_PX = 52;
-                const NAV_COOLDOWN_MS = 380;
-                let anchorYmd = null;
-                let lastNavAt = 0;
-                let active = false;
-                let dragMoved = false;
+                const REARM_INSET_PX = 56;
+                const NAV_COOLDOWN_MS = 90;
+                const session = {
+                    active: false,
+                    anchorYmd: null,
+                    extentYmd: null,
+                    dragMoved: false,
+                    lastNavAt: 0,
+                    lastPointerEvent: null,
+                    lastNavDirection: null,
+                    navArmedNext: true,
+                    navArmedPrev: true,
+                };
+
+                function getDayGridRect() {
+                    const body = calendarEl.querySelector('.fc-daygrid-body');
+                    return (body || calendarEl).getBoundingClientRect();
+                }
 
                 function clearPreview() {
                     calendarEl.querySelectorAll('.easytime-drag-preview').forEach((el) => {
@@ -1617,51 +2384,142 @@ if (!isset($currentRole)) exit;
                     });
                 }
 
-                function maybeChangeMonth(e) {
-                    const rect = calendarEl.getBoundingClientRect();
-                    const now = Date.now();
-                    if (now - lastNavAt < NAV_COOLDOWN_MS) return;
-                    if (e.clientY < rect.top + EDGE_PX) {
-                        calendar.prev();
-                        lastNavAt = now;
-                    } else if (e.clientY > rect.bottom - EDGE_PX) {
-                        calendar.next();
-                        lastNavAt = now;
-                    }
-                }
-
-                function onPointerMove(e) {
-                    if (!active || !anchorYmd) return;
-                    dragMoved = true;
-                    maybeChangeMonth(e);
-                    const dayEl = dayElFromPoint(e.clientX, e.clientY);
-                    const hoverYmd = dayEl ? dayEl.getAttribute('data-date') : null;
-                    if (!hoverYmd) return;
-                    const start = compareYmd(anchorYmd, hoverYmd) <= 0 ? anchorYmd : hoverYmd;
-                    const endInclusive = compareYmd(anchorYmd, hoverYmd) <= 0 ? hoverYmd : anchorYmd;
+                function previewFromExtent(extYmd) {
+                    if (!session.anchorYmd || !extYmd) return;
+                    session.extentYmd = extYmd;
+                    const start = compareYmd(session.anchorYmd, extYmd) <= 0 ? session.anchorYmd : extYmd;
+                    const endInclusive = compareYmd(session.anchorYmd, extYmd) <= 0 ? extYmd : session.anchorYmd;
                     previewRange(start, endInclusive);
                 }
 
+                function updateNavArming(e) {
+                    const grid = getDayGridRect();
+                    if (e.clientY <= grid.bottom - REARM_INSET_PX) {
+                        session.navArmedNext = true;
+                    }
+                    if (e.clientY >= grid.top + REARM_INSET_PX) {
+                        session.navArmedPrev = true;
+                    }
+                }
+
+                function continueAfterMonthChange(e) {
+                    if (!session.active || !session.anchorYmd) return;
+                    const bounds = getViewMonthBoundsYmd(calendar);
+
+                    if (session.lastNavDirection === 'next') {
+                        previewFromExtent(bounds.start);
+                        session.lastNavDirection = null;
+                        return;
+                    }
+                    if (session.lastNavDirection === 'prev') {
+                        previewFromExtent(bounds.end);
+                        session.lastNavDirection = null;
+                        return;
+                    }
+
+                    if (!e) return;
+                    const grid = getDayGridRect();
+                    const inGridVertically = e.clientY >= grid.top && e.clientY <= grid.bottom;
+                    if (!inGridVertically) return;
+                    const dayEl = dayElFromPoint(e.clientX, e.clientY);
+                    if (dayEl && calendarEl.contains(dayEl)) {
+                        previewFromExtent(dayEl.getAttribute('data-date'));
+                    }
+                }
+
+                function isPastBottomEdge(e, grid) {
+                    return e.clientY > grid.bottom - 1;
+                }
+
+                function isPastTopEdge(e, grid) {
+                    return e.clientY < grid.top + 1;
+                }
+
+                function maybeChangeMonthOnEdge(e) {
+                    const now = Date.now();
+                    if (now - session.lastNavAt < NAV_COOLDOWN_MS) return false;
+
+                    const grid = getDayGridRect();
+                    updateNavArming(e);
+
+                    if (session.navArmedNext && isPastBottomEdge(e, grid)) {
+                        session.navArmedNext = false;
+                        session.navArmedPrev = true;
+                        session.lastNavDirection = 'next';
+                        session.lastNavAt = now;
+                        calendar.next();
+                        continueAfterMonthChange(e);
+                        return true;
+                    }
+                    if (session.navArmedPrev && isPastTopEdge(e, grid)) {
+                        session.navArmedPrev = false;
+                        session.navArmedNext = true;
+                        session.lastNavDirection = 'prev';
+                        session.lastNavAt = now;
+                        calendar.prev();
+                        continueAfterMonthChange(e);
+                        return true;
+                    }
+                    return false;
+                }
+
+                function onPointerMove(e) {
+                    if (!session.active || !session.anchorYmd) return;
+                    session.dragMoved = true;
+                    session.lastPointerEvent = e;
+
+                    const grid = getDayGridRect();
+                    const dayEl = dayElFromPoint(e.clientX, e.clientY);
+                    if (dayEl && calendarEl.contains(dayEl) && e.clientY >= grid.top && e.clientY <= grid.bottom) {
+                        const hoverYmd = dayEl.getAttribute('data-date');
+                        if (hoverYmd) {
+                            updateNavArming(e);
+                            previewFromExtent(hoverYmd);
+                        }
+                    }
+
+                    if (maybeChangeMonthOnEdge(e)) {
+                        requestAnimationFrame(function() {
+                            continueAfterMonthChange(e);
+                        });
+                    }
+                }
+
                 function endDrag(e) {
-                    if (!active) return;
-                    active = false;
+                    if (!session.active) return;
+                    session.active = false;
                     calendarEl.classList.remove('easytime-cross-month-drag');
                     document.removeEventListener('pointermove', onPointerMove);
                     document.removeEventListener('pointerup', endDrag);
                     clearPreview();
+
                     const dayEl = dayElFromPoint(e.clientX, e.clientY);
-                    const hoverYmd = dayEl ? dayEl.getAttribute('data-date') : anchorYmd;
-                    if (dragMoved && anchorYmd && hoverYmd && typeof onCommitRange === 'function') {
+                    let hoverYmd = session.extentYmd || session.anchorYmd;
+                    if (dayEl && calendarEl.contains(dayEl)) {
+                        hoverYmd = dayEl.getAttribute('data-date') || hoverYmd;
+                    }
+
+                    if (session.dragMoved && session.anchorYmd && hoverYmd && typeof onCommitRange === 'function') {
                         if (calendarEl.id === 'employee-calendar') {
                             suppressEmpDateClick = true;
+                        } else if (calendarEl.id === 'ceo-calendar') {
+                            suppressCeoDateClick = true;
                         }
-                        const start = compareYmd(anchorYmd, hoverYmd) <= 0 ? anchorYmd : hoverYmd;
-                        const endInclusive = compareYmd(anchorYmd, hoverYmd) <= 0 ? hoverYmd : anchorYmd;
+                        const start = compareYmd(session.anchorYmd, hoverYmd) <= 0 ? session.anchorYmd : hoverYmd;
+                        const endInclusive = compareYmd(session.anchorYmd, hoverYmd) <= 0 ? hoverYmd : session.anchorYmd;
                         onCommitRange(start, addDaysYmd(endInclusive, 1), e);
                     }
-                    anchorYmd = null;
-                    dragMoved = false;
+
+                    session.anchorYmd = null;
+                    session.extentYmd = null;
+                    session.dragMoved = false;
+                    session.lastPointerEvent = null;
+                    session.lastNavDirection = null;
+                    session.navArmedNext = true;
+                    session.navArmedPrev = true;
                 }
+
+                session.continueAfterMonthChange = continueAfterMonthChange;
 
                 calendarEl.addEventListener('pointerdown', function(e) {
                     if (e.button !== 0) return;
@@ -1670,15 +2528,22 @@ if (!isset($currentRole)) exit;
                     if (!dayEl) return;
                     const ymd = dayEl.getAttribute('data-date');
                     if (!ymd) return;
-                    anchorYmd = ymd;
-                    active = true;
-                    dragMoved = false;
-                    lastNavAt = 0;
+                    session.anchorYmd = ymd;
+                    session.extentYmd = ymd;
+                    session.active = true;
+                    session.dragMoved = false;
+                    session.lastNavAt = 0;
+                    session.lastNavDirection = null;
+                    session.lastPointerEvent = e;
+                    session.navArmedNext = true;
+                    session.navArmedPrev = true;
                     calendarEl.classList.add('easytime-cross-month-drag');
-                    previewRange(ymd, ymd);
+                    previewFromExtent(ymd);
                     document.addEventListener('pointermove', onPointerMove);
                     document.addEventListener('pointerup', endDrag);
                 });
+
+                crossMonthDragByCalendarId[calendarEl.id] = session;
             }
 
             function setEmployeeFormDates(startStr, endExclusiveStr) {
@@ -1699,9 +2564,75 @@ if (!isset($currentRole)) exit;
                 endInput.dispatchEvent(new Event('change', { bubbles: true }));
             }
 
-            function setBlockedFormDates(startStr, endExclusiveStr) {
-                const startInput = document.getElementById('blocked-start-date');
-                const endInput = document.getElementById('blocked-end-date');
+            function syncAdminRangeToForms() {
+                const start = document.getElementById('admin-range-start-date')?.value || '';
+                const end = document.getElementById('admin-range-end-date')?.value || '';
+                const blockStart = document.getElementById('block-form-start-date');
+                const blockEnd = document.getElementById('block-form-end-date');
+                const vacStart = document.getElementById('vacation-form-start-date');
+                const vacEnd = document.getElementById('vacation-form-end-date');
+                if (blockStart) blockStart.value = start;
+                if (blockEnd) blockEnd.value = end;
+                if (vacStart) vacStart.value = start;
+                if (vacEnd) vacEnd.value = end;
+            }
+
+            function updateAdminRangeHintVisibility() {
+                const start = document.getElementById('admin-range-start-date')?.value || '';
+                const end = document.getElementById('admin-range-end-date')?.value || '';
+                const summary = document.getElementById('calendar-range-summary');
+                const hint = document.getElementById('calendar-range-hint');
+                const hasValidRange = !!(start && end && compareYmd(start, end) <= 0);
+
+                if (hasValidRange) {
+                    if (summary) {
+                        summary.textContent = formatPanelDateRange(start, end);
+                        summary.classList.remove('hidden');
+                    }
+                    hint?.classList.add('hidden');
+                } else {
+                    if (summary) {
+                        summary.textContent = '';
+                        summary.classList.add('hidden');
+                    }
+                    hint?.classList.remove('hidden');
+                }
+            }
+
+            function resetAdminRangePanels() {
+                ceoSelectedRange = null;
+                try {
+                    localStorage.removeItem(ceoSelectionStorageKey);
+                } catch (e) {
+                    // ignore storage errors
+                }
+                calendarSelection['ceo-calendar'] = { type: null, start: null, end: null, requestId: null };
+                clearRangeVisual('ceo-calendar');
+                document.getElementById('calendar-info-event-body')?.classList.add('hidden');
+                document.getElementById('calendar-event-actions') && (document.getElementById('calendar-event-actions').innerHTML = '');
+                clearCalendarActions();
+                document.getElementById('calendar-action-range-wrapper')?.classList.add('hidden');
+                syncAdminRangeToForms();
+                updateAdminVacationValidation();
+            }
+
+            function showAdminRangeSection(startYmd, endInclusiveYmd, options = {}) {
+                const { readonly = false } = options;
+                const summary = document.getElementById('calendar-range-summary');
+                if (summary) {
+                    summary.textContent = formatPanelDateRange(startYmd, endInclusiveYmd);
+                    summary.classList.remove('hidden');
+                }
+                document.getElementById('calendar-range-hint')?.classList.add('hidden');
+                const inputs = document.getElementById('calendar-range-inputs');
+                if (inputs) {
+                    inputs.classList.toggle('hidden', readonly);
+                }
+            }
+
+            function setAdminRangeDates(startStr, endExclusiveStr, options = {}) {
+                const startInput = document.getElementById('admin-range-start-date');
+                const endInput = document.getElementById('admin-range-end-date');
                 if (!startInput || !endInput) return;
 
                 const endDate = new Date(endExclusiveStr);
@@ -1710,24 +2641,59 @@ if (!isset($currentRole)) exit;
 
                 startInput.value = startStr;
                 endInput.value = localEnd;
+                showAdminRangeSection(startStr, localEnd, options);
+                syncAdminRangeToForms();
             }
 
-            function setAdminVacationFormDates(startStr, endExclusiveStr) {
-                const startInput = document.getElementById('admin-vacation-start-date');
-                const endInput = document.getElementById('admin-vacation-end-date');
-                if (!startInput || !endInput) return;
+            function applyAdminRangeFromInputs() {
+                const start = document.getElementById('admin-range-start-date')?.value;
+                const end = document.getElementById('admin-range-end-date')?.value;
+                updateAdminRangeHintVisibility();
 
-                const endDate = new Date(endExclusiveStr);
-                endDate.setDate(endDate.getDate() - 1);
-                const localEnd = endDate.toISOString().slice(0, 10);
+                if (!start || !end) {
+                    if (ceoSelectedRange) {
+                        resetAdminRangePanels();
+                    } else {
+                        syncAdminRangeToForms();
+                        updateAdminVacationValidation();
+                    }
+                    return;
+                }
 
-                startInput.value = startStr;
-                endInput.value = localEnd;
+                const endExclusive = addDaysYmd(end, 1);
+                if (compareYmd(start, end) > 0) {
+                    if (ceoSelectedRange) {
+                        resetAdminRangePanels();
+                    } else {
+                        syncAdminRangeToForms();
+                        updateAdminVacationValidation();
+                    }
+                    return;
+                }
+                ceoSelectedRange = { start, end: endExclusive };
+                ceoSelectionSetAt = Date.now();
+                persistCeoRange(ceoSelectedRange);
+                setCalendarRangeSelection('ceo-calendar', start, endExclusive, true);
+                syncAdminRangeToForms();
+                updateAdminRangeHintVisibility();
+                document.getElementById('calendar-info-event-body')?.classList.add('hidden');
+                if (hasBlockedOverlap(start, endExclusive)) {
+                    showActionUnblockSelection(start, endExclusive);
+                    setCalendarInfo('Zeitraum', start, end, buildAdminInfoMeta(start, end, 'Aktion: Sperrbereich(e) aufheben.'));
+                } else {
+                    showActionForRange(start, endExclusive);
+                    const actionText = ceoActionMode === 'vacation'
+                        ? 'Aktion: Urlaubszeit für Mitarbeiter buchen.'
+                        : 'Aktion: Sperrbereich setzen.';
+                    setCalendarInfo('Zeitraum', start, end, buildAdminInfoMeta(start, end, actionText));
+                }
+                updateAdminVacationValidation();
             }
 
             function clearCalendarActions() {
                 document.getElementById('calendar-info-content')?.classList.add('hidden');
-                document.getElementById('calendar-action-empty')?.classList.add('hidden');
+                document.getElementById('calendar-info-empty')?.classList.remove('hidden');
+                document.getElementById('calendar-action-empty')?.classList.remove('hidden');
                 document.getElementById('calendar-action-block-form')?.classList.add('hidden');
                 document.getElementById('calendar-action-vacation-form')?.classList.add('hidden');
                 document.getElementById('calendar-action-unblock')?.classList.add('hidden');
@@ -1735,17 +2701,17 @@ if (!isset($currentRole)) exit;
             }
 
             function setCalendarInfo(type, start, end, meta = '') {
-                const panel = document.getElementById('calendar-info-panel');
                 const metaEl = document.getElementById('calendar-info-meta');
-                if (!panel || !metaEl) return;
+                if (!metaEl) return;
+                document.getElementById('calendar-info-empty')?.classList.add('hidden');
+                document.getElementById('calendar-info-content')?.classList.remove('hidden');
                 if (meta && meta.trim() !== '') {
-                    metaEl.textContent = `${type}: ${start} bis ${end} | ${meta}`;
+                    metaEl.textContent = meta;
                     metaEl.classList.remove('hidden');
                 } else {
                     metaEl.textContent = '';
                     metaEl.classList.add('hidden');
                 }
-                document.getElementById('calendar-info-content')?.classList.remove('hidden');
             }
 
             function getTodayRange() {
@@ -1776,38 +2742,116 @@ if (!isset($currentRole)) exit;
                 }
             }
 
-            function applyCeoSelection(range, syncCalendarSelection = true) {
-                if (!range || !range.start || !range.end) return;
-                ceoSelectedRange = { start: range.start, end: range.end };
-                persistCeoRange(ceoSelectedRange);
-                setCalendarRangeSelection('ceo-calendar', range.start, range.end, syncCalendarSelection);
-                if (hasBlockedOverlap(ceoSelectedRange.start, ceoSelectedRange.end)) {
-                    showActionUnblockSelection(ceoSelectedRange.start, ceoSelectedRange.end);
-                } else {
-                    showActionBlockedSelection(ceoSelectedRange.start, ceoSelectedRange.end);
+            function loadCeoActionMode() {
+                try {
+                    const stored = localStorage.getItem(ceoActionModeStorageKey);
+                    return stored === 'block' ? 'block' : 'vacation';
+                } catch (e) {
+                    return 'vacation';
                 }
             }
 
-            function showActionBlockedSelection(startStr, endExclusiveStr) {
-                setBlockedFormDates(startStr, endExclusiveStr);
-                const endDate = new Date(endExclusiveStr);
-                endDate.setDate(endDate.getDate() - 1);
-                setCalendarInfo('Zeitraum', startStr, formatLocalDate(endDate), 'Aktion: Sperrbereich setzen oder auf Urlaubszeit buchen wechseln.');
-                document.getElementById('calendar-action-block-form')?.classList.remove('hidden');
-                document.getElementById('calendar-action-vacation-form')?.classList.add('hidden');
+            function setCeoActionMode(mode) {
+                ceoActionMode = mode === 'block' ? 'block' : 'vacation';
+                try {
+                    localStorage.setItem(ceoActionModeStorageKey, ceoActionMode);
+                } catch (e) {
+                    // ignore storage errors
+                }
+                updateCeoModeButtonStyles();
+            }
+
+            function updateCeoModeButtonStyles() {
+                const isVacation = ceoActionMode === 'vacation';
+                const vacPrimary = 'et-btn-primary py-2 rounded-xl text-sm font-bold';
+                const vacSecondary = 'et-btn-secondary py-2 rounded-xl text-sm font-bold';
+                const blockActive = 'bg-red-100 text-red-700 border border-red-200 py-2 rounded-xl text-sm font-bold';
+                const blockIdle = 'et-btn-secondary py-2 rounded-xl text-sm font-bold';
+                const vacBtn = document.getElementById('action-mode-vacation-btn');
+                const blockBtn = document.getElementById('action-mode-block-btn');
+                if (vacBtn) vacBtn.className = isVacation ? vacPrimary : vacSecondary;
+                if (blockBtn) blockBtn.className = isVacation ? blockIdle : blockActive;
+            }
+
+            function showAdminRangeActions() {
+                document.getElementById('calendar-action-empty')?.classList.add('hidden');
+                document.getElementById('calendar-action-range-wrapper')?.classList.remove('hidden');
                 document.getElementById('calendar-action-unblock')?.classList.add('hidden');
                 document.getElementById('calendar-action-event')?.classList.add('hidden');
             }
 
+            function showActionForRange(startStr, endExclusiveStr) {
+                if (ceoActionMode === 'vacation') {
+                    showActionVacationSelection(startStr, endExclusiveStr);
+                } else {
+                    showActionBlockedSelection(startStr, endExclusiveStr);
+                }
+                updateCeoModeButtonStyles();
+            }
+
+            function switchCeoActionMode(mode) {
+                setCeoActionMode(mode);
+                if (!ceoSelectedRange) return;
+                const endInclusive = addDaysYmd(ceoSelectedRange.end, -1);
+                if (hasBlockedOverlap(ceoSelectedRange.start, ceoSelectedRange.end)) {
+                    setCalendarInfo('Zeitraum', ceoSelectedRange.start, endInclusive, buildAdminInfoMeta(ceoSelectedRange.start, endInclusive, 'Aktion: Sperrbereich(e) aufheben.'));
+                    showActionUnblockSelection(ceoSelectedRange.start, ceoSelectedRange.end);
+                    return;
+                }
+                const actionText = mode === 'vacation'
+                    ? 'Aktion: Urlaubszeit für Mitarbeiter buchen.'
+                    : 'Aktion: Sperrbereich setzen.';
+                setCalendarInfo('Zeitraum', ceoSelectedRange.start, endInclusive, buildAdminInfoMeta(ceoSelectedRange.start, endInclusive, actionText));
+                showActionForRange(ceoSelectedRange.start, ceoSelectedRange.end);
+            }
+
+            function isAdminRangePast(startYmd, endInclusiveYmd) {
+                return compareYmd(startYmd, todayYmd) < 0 || compareYmd(endInclusiveYmd, todayYmd) < 0;
+            }
+
+            function buildAdminInfoMeta(startYmd, endInclusiveYmd, actionText) {
+                let meta = actionText;
+                if (isAdminRangePast(startYmd, endInclusiveYmd)) {
+                    meta += ' ' + ceoPastRangeInfo;
+                }
+                return meta;
+            }
+
+            function applyCeoSelection(range, syncCalendarSelection = true) {
+                if (!range || !range.start || !range.end) return;
+                ceoSelectedRange = { start: range.start, end: range.end };
+                ceoSelectionSetAt = Date.now();
+                persistCeoRange(ceoSelectedRange);
+                setCalendarRangeSelection('ceo-calendar', range.start, range.end, syncCalendarSelection);
+                const endInclusive = addDaysYmd(range.end, -1);
+                setAdminRangeDates(range.start, range.end);
+                document.getElementById('calendar-info-event-body')?.classList.add('hidden');
+                if (hasBlockedOverlap(ceoSelectedRange.start, ceoSelectedRange.end)) {
+                    setCalendarInfo('Zeitraum', range.start, endInclusive, buildAdminInfoMeta(range.start, endInclusive, 'Aktion: Sperrbereich(e) aufheben.'));
+                    showActionUnblockSelection(ceoSelectedRange.start, ceoSelectedRange.end);
+                } else {
+                    const actionText = ceoActionMode === 'vacation'
+                        ? 'Aktion: Urlaubszeit für Mitarbeiter buchen.'
+                        : 'Aktion: Sperrbereich setzen.';
+                    setCalendarInfo('Zeitraum', range.start, endInclusive, buildAdminInfoMeta(range.start, endInclusive, actionText));
+                    showActionForRange(ceoSelectedRange.start, ceoSelectedRange.end);
+                }
+                updateAdminVacationValidation();
+            }
+
+            function showActionBlockedSelection(startStr, endExclusiveStr) {
+                showAdminRangeActions();
+                document.getElementById('calendar-action-block-form')?.classList.remove('hidden');
+                document.getElementById('calendar-action-vacation-form')?.classList.add('hidden');
+                updateCeoModeButtonStyles();
+            }
+
             function showActionVacationSelection(startStr, endExclusiveStr) {
-                setAdminVacationFormDates(startStr, endExclusiveStr);
-                const endDate = new Date(endExclusiveStr);
-                endDate.setDate(endDate.getDate() - 1);
-                setCalendarInfo('Zeitraum', startStr, formatLocalDate(endDate), 'Aktion: Urlaubszeit für Mitarbeiter buchen.');
+                showAdminRangeActions();
                 document.getElementById('calendar-action-block-form')?.classList.add('hidden');
                 document.getElementById('calendar-action-vacation-form')?.classList.remove('hidden');
-                document.getElementById('calendar-action-unblock')?.classList.add('hidden');
-                document.getElementById('calendar-action-event')?.classList.add('hidden');
+                updateCeoModeButtonStyles();
+                updateAdminVacationValidation();
             }
 
             function getBlockedOverlaps(startStr, endExclusiveStr) {
@@ -1825,9 +2869,6 @@ if (!isset($currentRole)) exit;
                 const list = document.getElementById('calendar-action-unblock-list');
                 if (!list) return;
                 const overlaps = getBlockedOverlaps(startStr, endExclusiveStr);
-                const endDate = new Date(endExclusiveStr);
-                endDate.setDate(endDate.getDate() - 1);
-                setCalendarInfo('Zeitraum', startStr, formatLocalDate(endDate), `Aktion: ${overlaps.length} Sperrbereich(e) aufheben.`);
                 list.innerHTML = '';
                 overlaps.forEach((b) => {
                     const form = document.createElement('form');
@@ -1844,8 +2885,8 @@ if (!isset($currentRole)) exit;
                     `;
                     list.appendChild(form);
                 });
-                document.getElementById('calendar-action-block-form')?.classList.add('hidden');
-                document.getElementById('calendar-action-vacation-form')?.classList.add('hidden');
+                document.getElementById('calendar-action-empty')?.classList.add('hidden');
+                document.getElementById('calendar-action-range-wrapper')?.classList.add('hidden');
                 document.getElementById('calendar-action-unblock')?.classList.remove('hidden');
                 document.getElementById('calendar-action-event')?.classList.add('hidden');
             }
@@ -1860,6 +2901,7 @@ if (!isset($currentRole)) exit;
                     rejected: '<?= I18n::get('emp.status_rejected') ?>',
                     pending: '<?= I18n::get('emp.status_pending') ?>',
                     storno_requested: '<?= I18n::get('emp.status_storno_requested') ?>',
+                    change_requested: '<?= I18n::get('emp.status_change_requested') ?>',
                     cancelled: '<?= I18n::get('emp.status_cancelled') ?>'
                 };
                 return labels[status] || status;
@@ -1871,13 +2913,16 @@ if (!isset($currentRole)) exit;
                 const actions = document.getElementById('employee-selected-event-actions');
                 if (!actions) return;
 
+                showEmployeeRangeSection(request.start_date, request.end_date, { readonly: true });
+
                 renderEmployeeInfoPanel({
                     eyebrow: 'Antrag #' + request.id,
-                    range: formatEmployeeDateRange(request.start_date, request.end_date),
                     statusLabel: employeeStatusLabel(request.status),
                     statusClass: employeeStatusBadgeClass(request.status),
                     days: request.net_days
                 });
+
+                const employeeDatesWarning = buildEmployeeDatesWarningHtml(empDatesChangedPanelMsg);
 
                 let actionsHtml = '';
                 if (request.status === 'pending') {
@@ -1890,14 +2935,42 @@ if (!isset($currentRole)) exit;
                             </button>
                         </form>`;
                 } else if (request.status === 'approved') {
-                    actionsHtml = `
-                        <form method="POST" action="/?action=request_storno">
-                            <input type="hidden" name="request_id" value="${request.id}">
-                            <input type="hidden" name="return_tab" value="calendar">
-                            <button type="submit" class="w-full text-orange-600 hover:text-white hover:bg-orange-500 border border-orange-200 py-3 rounded-xl text-sm font-bold transition-colors">
-                                <?= I18n::get('emp.storno') ?>
-                            </button>
-                        </form>`;
+                    actionsHtml = buildActionPickerPanel([
+                        {
+                            id: 'change',
+                            label: empActionSectionChange,
+                            bodyHtml: `
+                                <form method="POST" action="/?action=request_change" class="employee-dates-form space-y-4"
+                                    data-original-start="${request.start_date}" data-original-end="${request.end_date}">
+                                    <input type="hidden" name="request_id" value="${request.id}">
+                                    <input type="hidden" name="return_tab" value="calendar">
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label class="block text-sm font-semibold text-emerald-800 mb-1.5"><?= I18n::get('emp.start_date') ?></label>
+                                            <input type="date" name="new_start_date" value="${request.start_date}" required class="w-full bg-[#fffdf2] border border-lime-200 rounded-xl px-4 py-3 text-sm text-emerald-900 outline-none focus:ring-2 focus:ring-lime-400">
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-semibold text-emerald-800 mb-1.5"><?= I18n::get('emp.end_date') ?></label>
+                                            <input type="date" name="new_end_date" value="${request.end_date}" required class="w-full bg-[#fffdf2] border border-lime-200 rounded-xl px-4 py-3 text-sm text-emerald-900 outline-none focus:ring-2 focus:ring-lime-400">
+                                        </div>
+                                    </div>
+                                    ${employeeDatesWarning}
+                                    <button type="submit" class="w-full et-btn-primary font-bold py-3 rounded-xl"><?= I18n::get('emp.request_change') ?></button>
+                                </form>`
+                        },
+                        {
+                            id: 'storno',
+                            label: empActionSectionStorno,
+                            bodyHtml: `
+                                <form method="POST" action="/?action=request_storno" class="space-y-4">
+                                    <input type="hidden" name="request_id" value="${request.id}">
+                                    <input type="hidden" name="return_tab" value="calendar">
+                                    <button type="submit" class="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl transition-colors">
+                                        <?= I18n::get('emp.storno') ?>
+                                    </button>
+                                </form>`
+                        }
+                    ], 'change');
                 } else if (request.status === 'storno_requested') {
                     actionsHtml = `
                         <form method="POST" action="/?action=withdraw_storno">
@@ -1907,10 +2980,21 @@ if (!isset($currentRole)) exit;
                                 <?= I18n::get('emp.cancel_storno') ?>
                             </button>
                         </form>`;
+                } else if (request.status === 'change_requested') {
+                    actionsHtml = `
+                        <form method="POST" action="/?action=withdraw_change">
+                            <input type="hidden" name="request_id" value="${request.id}">
+                            <input type="hidden" name="return_tab" value="calendar">
+                            <button type="submit" class="w-full et-btn-secondary py-3 rounded-xl text-sm font-bold transition-colors">
+                                <?= I18n::get('emp.cancel_change') ?>
+                            </button>
+                        </form>`;
                 } else {
                     actionsHtml = '<p class="text-sm text-emerald-600 text-center py-2">Keine Aktionen für diesen Status.</p>';
                 }
                 actions.innerHTML = actionsHtml;
+                wireActionPicker(actions);
+                wireDatesChangeForms(actions);
 
                 document.getElementById('employee-calendar-action-empty')?.classList.add('hidden');
                 document.getElementById('employee-calendar-action-range')?.classList.add('hidden');
@@ -1940,47 +3024,123 @@ if (!isset($currentRole)) exit;
             function renderCeoEventDetails(requestId) {
                 const request = requestLookup.find((r) => String(r.id) === String(requestId));
                 if (!request) return;
-                const info = document.getElementById('calendar-selected-event-info');
-                const hiddenId = document.getElementById('calendar-selected-request-id');
-                const declineBtn = document.getElementById('calendar-event-decline-btn');
-                const approveBtn = document.getElementById('calendar-event-approve-btn');
-                if (!info || !hiddenId) return;
-                hiddenId.value = request.id;
+                const actions = document.getElementById('calendar-event-actions');
+                const eventInfo = document.getElementById('calendar-info-event-body');
+                if (!actions || !eventInfo) return;
 
-                if (declineBtn && approveBtn) {
-                    if (request.status === 'storno_requested') {
-                        declineBtn.value = 'approved';
-                        approveBtn.value = 'cancelled';
-                        declineBtn.textContent = 'Decline Storno';
-                        approveBtn.textContent = 'Approve Storno';
-                    } else {
-                        declineBtn.value = 'rejected';
-                        approveBtn.value = 'approved';
-                        declineBtn.textContent = '<?= I18n::get('ceo.decline') ?>';
-                        approveBtn.textContent = '<?= I18n::get('ceo.approve') ?>';
-                    }
-                    const canDecide = !['rejected', 'cancelled'].includes(request.status);
-                    declineBtn.disabled = !canDecide;
-                    approveBtn.disabled = !canDecide;
-                    if (!canDecide) {
-                        declineBtn.classList.add('opacity-50', 'cursor-not-allowed');
-                        approveBtn.classList.add('opacity-50', 'cursor-not-allowed');
-                    } else {
-                        declineBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-                        approveBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-                    }
+                const commentLabel = <?= json_encode(I18n::get('ceo.decision_comment'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+                const fromLabel = <?= json_encode(I18n::get('ceo.from'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+                const toLabel = <?= json_encode(I18n::get('ceo.to'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+                const modifyLabel = <?= json_encode(I18n::get('ceo.modify_vacation'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+                const approveDatesLabel = <?= json_encode(I18n::get('ceo.approve_with_dates'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+                const commentField = `
+                    <div>
+                        <label class="block text-sm font-semibold text-emerald-800 mb-1.5">${commentLabel}</label>
+                        <input type="text" name="admin_comment" class="w-full bg-[#fffdf2] border border-lime-200 rounded-xl px-4 py-3 text-sm text-emerald-900 outline-none focus:ring-2 focus:ring-lime-400">
+                    </div>`;
+                const dateFields = (startVal, endVal, startName, endName) => `
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-sm font-semibold text-emerald-800 mb-1.5">${fromLabel}</label>
+                            <input type="date" name="${startName}" value="${startVal}" class="w-full bg-[#fffdf2] border border-lime-200 rounded-xl px-4 py-3 text-sm text-emerald-900 outline-none focus:ring-2 focus:ring-lime-400">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-emerald-800 mb-1.5">${toLabel}</label>
+                            <input type="date" name="${endName}" value="${endVal}" class="w-full bg-[#fffdf2] border border-lime-200 rounded-xl px-4 py-3 text-sm text-emerald-900 outline-none focus:ring-2 focus:ring-lime-400">
+                        </div>
+                    </div>`;
+
+                const datesWarningPending = buildAdminDatesWarningHtml(ceoDatesChangedPanelMsg);
+                const datesWarningWunsch = buildAdminDatesWarningHtml(ceoDatesChangedPanelWunschMsg);
+
+                let actionsHtml = '';
+                if (request.status === 'pending') {
+                    actionsHtml = `
+                        <form method="POST" action="/?action=decide_request" class="admin-dates-form space-y-4"
+                            data-original-start="${request.start_date}" data-original-end="${request.end_date}"
+                            data-warning-msg="${ceoDatesChangedPanelMsg.replace(/"/g, '&quot;')}">
+                            <input type="hidden" name="request_id" value="${request.id}">
+                            ${dateFields(request.start_date, request.end_date, 'approved_start_date', 'approved_end_date')}
+                            ${datesWarningPending}
+                            ${commentField}
+                            <div class="grid grid-cols-2 gap-2">
+                                <button type="submit" name="status" value="rejected" class="text-red-600 hover:text-white hover:bg-red-500 border border-red-200 py-2.5 rounded-xl text-sm font-bold transition-colors"><?= I18n::get('ceo.decline') ?></button>
+                                <button type="submit" name="status" value="approved" class="et-btn-primary py-2.5 rounded-xl text-sm font-bold">${approveDatesLabel}</button>
+                            </div>
+                        </form>`;
+                } else if (request.status === 'storno_requested') {
+                    actionsHtml = `
+                        <form method="POST" action="/?action=decide_request" class="space-y-4">
+                            <input type="hidden" name="request_id" value="${request.id}">
+                            ${commentField}
+                            <div class="grid grid-cols-2 gap-2">
+                                <button type="submit" name="status" value="approved" class="text-red-600 hover:text-white hover:bg-red-500 border border-red-200 py-2.5 rounded-xl text-sm font-bold transition-colors"><?= I18n::get('ceo.decline_storno') ?></button>
+                                <button type="submit" name="status" value="cancelled" class="bg-orange-500 hover:bg-orange-600 text-white py-2.5 rounded-xl text-sm font-bold transition-colors"><?= I18n::get('ceo.approve_storno') ?></button>
+                            </div>
+                        </form>`;
+                } else if (request.status === 'change_requested') {
+                    const wStart = request.wunsch_start_date || request.start_date;
+                    const wEnd = request.wunsch_end_date || request.end_date;
+                    actionsHtml = `
+                        <form method="POST" action="/?action=decide_change_request" class="admin-dates-form space-y-4"
+                            data-original-start="${wStart}" data-original-end="${wEnd}"
+                            data-warning-msg="${ceoDatesChangedPanelWunschMsg.replace(/"/g, '&quot;')}">
+                            <input type="hidden" name="request_id" value="${request.id}">
+                            ${dateFields(wStart, wEnd, 'approved_start_date', 'approved_end_date')}
+                            ${datesWarningWunsch}
+                            ${commentField}
+                            <div class="grid grid-cols-2 gap-2">
+                                <button type="submit" name="decision" value="reject" class="text-red-600 hover:text-white hover:bg-red-500 border border-red-200 py-2.5 rounded-xl text-sm font-bold transition-colors"><?= I18n::get('ceo.reject_change') ?></button>
+                                <button type="submit" name="decision" value="approve" class="bg-violet-600 hover:bg-violet-700 text-white py-2.5 rounded-xl text-sm font-bold transition-colors"><?= I18n::get('ceo.approve_change') ?></button>
+                            </div>
+                        </form>`;
+                } else if (request.status === 'approved') {
+                    actionsHtml = buildActionPickerPanel([
+                        {
+                            id: 'adjust',
+                            label: ceoActionSectionAdjust,
+                            bodyHtml: `
+                                <form method="POST" action="/?action=admin_modify_vacation" class="admin-dates-form space-y-4"
+                                    data-original-start="${request.start_date}" data-original-end="${request.end_date}"
+                                    data-warning-msg="${ceoDatesChangedPanelMsg.replace(/"/g, '&quot;')}">
+                                    <input type="hidden" name="request_id" value="${request.id}">
+                                    ${dateFields(request.start_date, request.end_date, 'start_date', 'end_date')}
+                                    ${datesWarningPending}
+                                    ${commentField}
+                                    <button type="submit" class="w-full et-btn-primary font-bold py-3 rounded-xl">${modifyLabel}</button>
+                                </form>`
+                        },
+                        {
+                            id: 'cancel',
+                            label: ceoActionSectionCancel,
+                            bodyHtml: `
+                                <form method="POST" action="/?action=decide_request" class="space-y-4">
+                                    <input type="hidden" name="request_id" value="${request.id}">
+                                    ${commentField}
+                                    <button type="submit" name="status" value="cancelled" class="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl transition-colors"><?= I18n::get('ceo.admin_cancel_vacation') ?></button>
+                                </form>`
+                        }
+                    ], 'adjust');
+                } else {
+                    actionsHtml = '<p class="text-sm text-emerald-600 text-center py-2"><?= I18n::get('ceo.no_event_actions') ?></p>';
                 }
+                actions.innerHTML = actionsHtml;
+                wireActionPicker(actions);
+                wireDatesChangeForms(actions);
 
-                info.innerHTML = `
+                setAdminRangeDates(request.start_date, addDaysYmd(request.end_date, 1), { readonly: true });
+
+                eventInfo.innerHTML = `
                     <div class="font-bold text-base mb-2">${request.firstname} ${request.lastname}</div>
-                    <div><span class="font-semibold">Zeitraum:</span> ${request.start_date} bis ${request.end_date}</div>
-                    <div><span class="font-semibold">Status:</span> ${request.status}</div>
+                    <div><span class="font-semibold">Status:</span> ${employeeStatusLabel(request.status)}</div>
                     <div><span class="font-semibold">Tage:</span> ${request.net_days}</div>
+                    ${request.status === 'change_requested' && request.wunsch_start_date ? `<div><span class="font-semibold"><?= I18n::get('ceo.proposed_dates') ?>:</span> ${request.wunsch_start_date} – ${request.wunsch_end_date} (${request.wunsch_net_days || ''} Tage)</div>` : ''}
                     <div><span class="font-semibold">Kontakt:</span> ${request.email}</div>
                 `;
-                setCalendarInfo('Termin', request.start_date, request.end_date, `Status: ${request.status} | Mitarbeiter: ${request.firstname} ${request.lastname}`);
-                document.getElementById('calendar-action-block-form')?.classList.add('hidden');
-                document.getElementById('calendar-action-vacation-form')?.classList.add('hidden');
+                eventInfo.classList.remove('hidden');
+                setCalendarInfo('Termin', request.start_date, request.end_date, `Antrag #${request.id}`);
+                document.getElementById('calendar-action-empty')?.classList.add('hidden');
+                document.getElementById('calendar-action-range-wrapper')?.classList.add('hidden');
                 document.getElementById('calendar-action-unblock')?.classList.add('hidden');
                 document.getElementById('calendar-action-event')?.classList.remove('hidden');
             }
@@ -1988,18 +3148,26 @@ if (!isset($currentRole)) exit;
             function initFC(elemId) {
                 const el = document.getElementById(elemId);
                 if (!el) return;
+                const compactToolbar = window.matchMedia('(max-width: 639px)').matches;
+                const isMobile = window.matchMedia('(max-width: 1023px)').matches;
                 const calendar = new FullCalendar.Calendar(el, {
                     initialView: 'dayGridMonth',
                     locale: currentLang,
                     events: fcEvents,
-                    headerToolbar: {
+                    fixedWeekCount: false,
+                    showNonCurrentDates: true,
+                    headerToolbar: compactToolbar ? {
+                        left: 'prev,next',
+                        center: 'title',
+                        right: 'today'
+                    } : {
                         left: 'prev,next today',
                         center: 'title',
                         right: 'dayGridMonth,dayGridWeek'
                     },
                     height: 'auto',
                     firstDay: 1, // Start on Monday
-                    weekNumbers: true,
+                    weekNumbers: !isMobile,
                     weekNumberContent: function(arg) { return 'KW ' + arg.num; },
                     eventDisplay: 'block',
                     unselectAuto: false,
@@ -2010,14 +3178,16 @@ if (!isset($currentRole)) exit;
                             suppressEmpDateClick = false;
                             return;
                         }
+                        if (elemId === 'ceo-calendar' && suppressCeoDateClick) {
+                            suppressCeoDateClick = false;
+                            return;
+                        }
                         if (elemId === 'employee-calendar') {
                             handleEmployeeDateClick(info.dateStr);
                             return;
                         }
                         if (elemId === 'ceo-calendar' && (currentRole === 'CEO' || currentRole === 'Admin')) {
-                            const start = info.dateStr;
-                            const end = addDaysYmd(start, 1);
-                            applyCeoSelection({ start, end }, true);
+                            handleCeoDateClick(info.dateStr);
                         }
                     },
                     dayCellDidMount: function(arg) {
@@ -2036,11 +3206,18 @@ if (!isset($currentRole)) exit;
                     eventDidMount: function(arg) {
                         const requestId = arg.event.extendedProps && arg.event.extendedProps.requestId;
                         const status = arg.event.extendedProps && arg.event.extendedProps.status;
+                        const userId = arg.event.extendedProps && arg.event.extendedProps.userId;
                         if (requestId) {
                             arg.el.setAttribute('data-request-id', requestId);
                         }
                         if (status) {
                             arg.el.setAttribute('data-status', status);
+                        }
+                        if (userId != null && elemId === 'ceo-calendar') {
+                            arg.el.setAttribute('data-user-id', String(userId));
+                            if (!isCeoUserVisible(userId)) {
+                                arg.el.style.display = 'none';
+                            }
                         }
                         if (shouldHideCancelledEvent(elemId, status)) {
                             arg.el.style.display = 'none';
@@ -2052,6 +3229,10 @@ if (!isset($currentRole)) exit;
                     },
                     datesSet: function() {
                         reapplySelectionVisuals(elemId);
+                        const drag = crossMonthDragByCalendarId[elemId];
+                        if (drag && drag.active && drag.lastPointerEvent) {
+                            drag.continueAfterMonthChange(drag.lastPointerEvent);
+                        }
                     },
                     eventClick: function(info) {
                         if (info.event.extendedProps && info.event.extendedProps.isBlocked) {
@@ -2064,6 +3245,13 @@ if (!isset($currentRole)) exit;
                             const sel = calendarSelection['employee-calendar'];
                             if (sel.type === 'event' && String(sel.requestId) === String(requestId)) {
                                 clearEmployeeCalendarSelection();
+                                return;
+                            }
+                        }
+                        if (elemId === 'ceo-calendar') {
+                            const sel = calendarSelection['ceo-calendar'];
+                            if (sel.type === 'event' && String(sel.requestId) === String(requestId)) {
+                                clearCeoCalendarSelection();
                                 return;
                             }
                         }
@@ -2080,11 +3268,16 @@ if (!isset($currentRole)) exit;
                 }
                 if (elemId === 'ceo-calendar') {
                     ceoCalendarInstance = calendar;
+                    ceoActionMode = loadCeoActionMode();
                     attachCrossMonthDrag(calendar, el, function(startYmd, endExclusive) {
                         applyCeoSelection({ start: startYmd, end: endExclusive }, false);
                     });
                     const persistedRange = loadPersistedCeoRange();
-                    applyCeoSelection(persistedRange || getTodayRange());
+                    if (persistedRange) {
+                        applyCeoSelection(persistedRange);
+                    } else if (window.matchMedia('(min-width: 1024px)').matches) {
+                        applyCeoSelection(getTodayRange());
+                    }
                 }
             }
 
@@ -2092,7 +3285,7 @@ if (!isset($currentRole)) exit;
                 initFC('employee-calendar');
                 const showCancelledCb = document.getElementById('employee-show-cancelled');
                 if (showCancelledCb) {
-                    showCancelledCb.checked = isShowCancelledVacationEnabled();
+                    showCancelledCb.checked = isShowCancelledVacationEnabled('employee-calendar');
                     showCancelledCb.addEventListener('change', function() {
                         localStorage.setItem(showCancelledVacationKey, showCancelledCb.checked ? '1' : '0');
                         applyCancelledVacationVisibility('employee-calendar');
@@ -2103,33 +3296,72 @@ if (!isset($currentRole)) exit;
                     const start = document.getElementById('employee-start-date')?.value;
                     const end = document.getElementById('employee-end-date')?.value;
                     if (!start || !end) return;
-                    updateEmployeeRangeSelectionUi(start, addDaysYmd(end, 1));
+                    const endExclusive = addDaysYmd(end, 1);
+                    if (start >= endExclusive) return;
+                    setCalendarRangeSelection('employee-calendar', start, endExclusive, true);
                 }
                 document.getElementById('employee-start-date')?.addEventListener('change', syncEmployeePastUiFromForm);
                 document.getElementById('employee-end-date')?.addEventListener('change', syncEmployeePastUiFromForm);
             }
             if (document.getElementById('ceo-calendar')) {
                 initFC('ceo-calendar');
+                const showCancelledCeoCb = document.getElementById('ceo-show-cancelled');
+                if (showCancelledCeoCb) {
+                    showCancelledCeoCb.checked = isShowCancelledVacationEnabled('ceo-calendar');
+                    showCancelledCeoCb.addEventListener('change', function() {
+                        localStorage.setItem(showCancelledCeoKey, showCancelledCeoCb.checked ? '1' : '0');
+                        applyCancelledVacationVisibility('ceo-calendar');
+                    });
+                    applyCancelledVacationVisibility('ceo-calendar');
+                }
             }
+            if (document.getElementById('ceo-employee-filter')) {
+                initCeoEmployeeFilter();
+            }
+            wireDatesChangeForms();
 
             document.getElementById('action-mode-vacation-btn')?.addEventListener('click', function() {
-                const start = document.getElementById('blocked-start-date')?.value;
-                const end = document.getElementById('blocked-end-date')?.value;
-                if (start && end) {
-                    const endPlusOne = new Date(end);
-                    endPlusOne.setDate(endPlusOne.getDate() + 1);
-                    showActionVacationSelection(start, formatLocalDate(endPlusOne));
-                }
+                switchCeoActionMode('vacation');
             });
-            document.getElementById('action-mode-block-btn-2')?.addEventListener('click', function() {
-                const start = document.getElementById('admin-vacation-start-date')?.value;
-                const end = document.getElementById('admin-vacation-end-date')?.value;
-                if (start && end) {
-                    const endPlusOne = new Date(end);
-                    endPlusOne.setDate(endPlusOne.getDate() + 1);
-                    showActionBlockedSelection(start, formatLocalDate(endPlusOne));
-                }
+            document.getElementById('action-mode-block-btn')?.addEventListener('click', function() {
+                switchCeoActionMode('block');
             });
+            document.getElementById('admin-range-start-date')?.addEventListener('change', applyAdminRangeFromInputs);
+            document.getElementById('admin-range-end-date')?.addEventListener('change', applyAdminRangeFromInputs);
+            updateAdminRangeHintVisibility();
+
+            function adminRangeIsPast() {
+                const start = document.getElementById('admin-range-start-date')?.value;
+                const end = document.getElementById('admin-range-end-date')?.value;
+                if (!start || !end) return false;
+                return isAdminRangePast(start, end);
+            }
+
+            function handleAdminActionFormSubmit(e) {
+                syncAdminRangeToForms();
+                const confirmInput = e.target.querySelector('input[name="confirm_past"]');
+                if (confirmInput) confirmInput.value = '';
+
+                if (e.target.id === 'calendar-action-vacation-form') {
+                    const issue = getAdminVacationValidationIssue();
+                    if (issue) {
+                        e.preventDefault();
+                        if (window.showEasyTimeToast) {
+                            window.showEasyTimeToast(issue.code, 'error', issue.message);
+                        }
+                        return;
+                    }
+                }
+
+                if (adminRangeIsPast()) {
+                    e.preventDefault();
+                    openAdminPastConfirmModal(e.target);
+                }
+            }
+
+            document.getElementById('admin-vacation-user')?.addEventListener('change', updateAdminVacationValidation);
+            document.getElementById('calendar-action-vacation-form')?.addEventListener('submit', handleAdminActionFormSubmit);
+            document.getElementById('calendar-action-block-form')?.addEventListener('submit', handleAdminActionFormSubmit);
 
             // Admin calendar keeps a persistent selection by design.
 
@@ -2149,6 +3381,7 @@ if (!isset($currentRole)) exit;
 
             const filtered = requestLookup.filter(function(r) {
                 const name = (r.firstname + ' ' + r.lastname).toLowerCase();
+                if (!isCeoUserVisible(r.user_id)) return false;
                 return (!nameRaw || name.includes(nameRaw)) && (!statusF || r.status === statusF);
             });
 
@@ -2205,6 +3438,36 @@ if (!isset($currentRole)) exit;
             modal.classList.remove('flex');
         }
 
+        function openAdminPastConfirmModal(form) {
+            adminPastConfirmForm = form;
+            const modal = document.getElementById('admin-past-confirm-modal');
+            if (!modal) return;
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeAdminPastConfirmModal() {
+            adminPastConfirmForm = null;
+            const modal = document.getElementById('admin-past-confirm-modal');
+            if (!modal) return;
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function confirmAdminPastAction() {
+            if (!adminPastConfirmForm) return;
+            let confirmInput = adminPastConfirmForm.querySelector('input[name="confirm_past"]');
+            if (!confirmInput) {
+                confirmInput = document.createElement('input');
+                confirmInput.type = 'hidden';
+                confirmInput.name = 'confirm_past';
+                adminPastConfirmForm.appendChild(confirmInput);
+            }
+            confirmInput.value = '1';
+            adminPastConfirmForm.submit();
+            closeAdminPastConfirmModal();
+        }
+
         function vacationForm() {
             return {
                 start: '',
@@ -2236,6 +3499,19 @@ if (!isset($currentRole)) exit;
                             this.netDays = 0;
                         }
                     }
+                },
+                handleEmployeeRequestSubmit(e) {
+                    if (this.netDays <= 0 || !this.start || !this.end) {
+                        e.preventDefault();
+                        return;
+                    }
+                    const issue = getEmployeeSelectionIssue(this.start, addDaysYmd(this.end, 1));
+                    if (issue) {
+                        e.preventDefault();
+                        if (window.showEasyTimeToastMessage) {
+                            window.showEasyTimeToastMessage(issue.message, 'error', issue.type);
+                        }
+                    }
                 }
             }
         }
@@ -2250,5 +3526,6 @@ if (!isset($currentRole)) exit;
         }
 
     </script>
+    <?php include __DIR__ . '/partials/toast.php'; ?>
 </body>
 </html>
