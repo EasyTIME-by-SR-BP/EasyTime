@@ -31,6 +31,9 @@ if ($jobEnv !== []) {
         if (!is_string($key) || !is_string($value)) {
             continue;
         }
+        if (getenv($key) !== false && getenv($key) !== '') {
+            continue;
+        }
         putenv($key . '=' . $value);
         $_ENV[$key] = $value;
     }

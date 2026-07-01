@@ -72,7 +72,6 @@ class MailService {
             'userId' => $userId,
             'notificationId' => $notificationId,
             'payload' => $payload,
-            'env' => self::mailEnvSnapshot(),
         ];
         $jobPath = sys_get_temp_dir() . '/easytime-mail-' . $notificationId . '-' . bin2hex(random_bytes(4)) . '.json';
         if (@file_put_contents($jobPath, json_encode($job, JSON_UNESCAPED_UNICODE)) === false) {
@@ -148,25 +147,6 @@ class MailService {
         }
 
         return true;
-    }
-
-    /** @return array<string, string> */
-    private static function mailEnvSnapshot(): array {
-        $keys = [
-            'MAIL_ENABLED', 'MAIL_HOST', 'MAIL_PORT', 'MAIL_USERNAME', 'MAIL_PASSWORD',
-            'MAIL_FROM_ADDRESS', 'MAIL_FROM_NAME', 'MAIL_ENCRYPTION', 'MAIL_SMTP_AUTH',
-            'MAIL_AUTH_TYPE', 'MAIL_SMTP_INSECURE', 'MAIL_SMTP_AUTO_TLS', 'MAIL_SMTP_TIMEOUT',
-            'MAIL_NOTIFY_TASKS', 'MAIL_NOTIFY_INFO', 'APP_URL',
-            'DB_DRIVER', 'DB_HOST', 'DB_PORT', 'DB_DATABASE', 'DB_USERNAME', 'DB_PASSWORD',
-        ];
-        $env = [];
-        foreach ($keys as $key) {
-            $value = getenv($key);
-            if ($value !== false && $value !== '') {
-                $env[$key] = (string) $value;
-            }
-        }
-        return $env;
     }
 
     /**
