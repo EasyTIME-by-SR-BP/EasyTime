@@ -26,7 +26,7 @@ $batchSize  = 500;
 
 if (!is_readable($sourcePath)) {
     fwrite(STDERR, "SQLite file not found: {$sourcePath}\n");
-    fwrite(STDERR, "Run: python3 database/convert_import.py\n");
+    fwrite(STDERR, "Run: python3 database/convert_legacy_deploy.py --source /path/to/dump.sql\n");
     exit(1);
 }
 
@@ -35,7 +35,7 @@ $sqlite->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
 $mysql = Database::getConnection();
 
-$tables = [
+$stammdatenTables = [
     'mitarbeiter',
     'standorte',
     'klassen',
@@ -47,18 +47,39 @@ $tables = [
     'abmeldung',
     'aenderungsmeldung',
     'taetigkeitsart',
-    'taetigkeit',
+    'vorlagen',
+    'app_settings',
+];
+
+$fullTables = [
+    'mitarbeiter',
+    'standorte',
+    'klassen',
+    'dokumente',
+    'mitarbeiter_dokumente',
+    'mitarbeiter_standorte',
+    'standort_vertretung',
+    'eintritt',
+    'abmeldung',
+    'aenderungsmeldung',
+    'taetigkeitsart',
     'event',
     'urlaub',
     'urlaubssperre',
     'urlaub_kommentar',
     'urlaub_event',
-    'uebertrag',
     'vorlagen',
-    'zuschlag',
-    'monatsbericht_view',
     'app_settings',
 ];
+
+$profile = strtolower((string) (getenv('MIGRATE_PROFILE') ?: 'stammdaten'));
+$tables = match ($profile) {
+    'full' => $fullTables,
+    'stammdaten' => $stammdatenTables,
+    default => throw new InvalidArgumentException("Unknown MIGRATE_PROFILE: {$profile}"),
+};
+
+echo "Migration profile: {$profile}\n";
 
 $mysql->exec('SET FOREIGN_KEY_CHECKS = 0');
 

@@ -78,13 +78,22 @@ class Inbox {
                 $rowThreadId = 'individual_' . bin2hex(random_bytes(6)) . '_' . $userId;
             }
 
-            Notification::create($userId, $title, $message, $category, [
+            $notificationId = Notification::create($userId, $title, $message, $category, [
                 'type' => $type,
                 'resolution_mode' => $resolution,
                 'thread_id' => $rowThreadId,
                 'action_url' => $actionUrl,
                 'related_user_id' => $relatedUserId,
             ]);
+
+            $mailPayload = [
+                'title' => $title,
+                'message' => $message,
+                'category' => $category,
+                'type' => $type,
+                'action_url' => $actionUrl,
+            ];
+            MailService::sendForNotification($userId, $notificationId, $mailPayload);
         }
 
         return $threadId;

@@ -44,6 +44,32 @@ CREATE TABLE IF NOT EXISTS klassen (
   FOREIGN KEY (mitarbeiter_id) REFERENCES mitarbeiter(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS fuehrerscheinklassen (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  bezeichnung VARCHAR(120) NOT NULL UNIQUE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS mitarbeiter_fuehrerscheinklassen (
+  mitarbeiter_id INT NOT NULL,
+  klasse_id      INT NOT NULL,
+  PRIMARY KEY (mitarbeiter_id, klasse_id),
+  FOREIGN KEY (mitarbeiter_id) REFERENCES mitarbeiter(id) ON DELETE CASCADE,
+  FOREIGN KEY (klasse_id) REFERENCES fuehrerscheinklassen(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS abteilungen (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  bezeichnung VARCHAR(120) NOT NULL UNIQUE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS mitarbeiter_abteilungen (
+  mitarbeiter_id INT NOT NULL,
+  abteilung_id   INT NOT NULL,
+  PRIMARY KEY (mitarbeiter_id, abteilung_id),
+  FOREIGN KEY (mitarbeiter_id) REFERENCES mitarbeiter(id) ON DELETE CASCADE,
+  FOREIGN KEY (abteilung_id) REFERENCES abteilungen(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS dokumente (
   id           INT AUTO_INCREMENT PRIMARY KEY,
   url          TEXT NULL,
@@ -249,6 +275,37 @@ CREATE TABLE IF NOT EXISTS notifications (
   resolved_by_user_id INT DEFAULT NULL,
   created_at          DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES mitarbeiter(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS standort_mindestbesetzung (
+  standort_id INT NOT NULL,
+  weekday     TINYINT NOT NULL,
+  min_count   INT NOT NULL DEFAULT 0,
+  PRIMARY KEY (standort_id, weekday),
+  FOREIGN KEY (standort_id) REFERENCES standorte(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS abteilung_mindestbesetzung (
+  abteilung_id INT NOT NULL,
+  weekday      TINYINT NOT NULL,
+  min_count    INT NOT NULL DEFAULT 0,
+  PRIMARY KEY (abteilung_id, weekday),
+  FOREIGN KEY (abteilung_id) REFERENCES abteilungen(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+ALTER TABLE urlaub ADD COLUMN IF NOT EXISTS ist_ganztag TINYINT NOT NULL DEFAULT 1;
+ALTER TABLE urlaub ADD COLUMN IF NOT EXISTS minuten_abwesend INT NULL;
+
+CREATE TABLE IF NOT EXISTS urlaub_tagesplan (
+  id           INT AUTO_INCREMENT PRIMARY KEY,
+  urlaub_id    INT NOT NULL,
+  datum        DATE NOT NULL,
+  von_uhrzeit  TIME NULL,
+  bis_uhrzeit  TIME NULL,
+  minuten      INT NOT NULL DEFAULT 0,
+  ist_ganztag  TINYINT NOT NULL DEFAULT 1,
+  UNIQUE KEY uq_urlaub_datum (urlaub_id, datum),
+  FOREIGN KEY (urlaub_id) REFERENCES urlaub(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 SET FOREIGN_KEY_CHECKS = 1;

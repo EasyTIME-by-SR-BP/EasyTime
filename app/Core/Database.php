@@ -142,6 +142,10 @@ class Database {
             self::ensureNotificationColumns($db);
             self::ensureRequestEventsTable($db);
             self::ensureUrlaubChangeColumns($db);
+            self::ensureLicenseClassPool($db);
+            self::ensureAbteilungPool($db);
+            \App\Models\Mindestbesetzung::ensureSchema($db);
+            \App\Models\VacationSchedule::ensureSchema($db);
             return;
         }
 
@@ -200,6 +204,10 @@ class Database {
         self::ensureNotificationColumns($db);
         self::ensureRequestEventsTable($db);
         self::ensureUrlaubChangeColumns($db);
+        self::ensureLicenseClassPool($db);
+        self::ensureAbteilungPool($db);
+        \App\Models\Mindestbesetzung::ensureSchema($db);
+        \App\Models\VacationSchedule::ensureSchema($db);
     }
 
     private static function ensureUrlaubChangeColumns(PDO $db): void {
@@ -283,7 +291,15 @@ class Database {
         }
     }
 
-    private static function columnExists(PDO $db, string $table, string $column): bool {
+    public static function columnExists(PDO $db, string $table, string $column): bool {
+        return self::columnExistsInternal($db, $table, $column);
+    }
+
+    public static function tableExists(PDO $db, string $table): bool {
+        return self::tableExistsInternal($db, $table);
+    }
+
+    private static function columnExistsInternal(PDO $db, string $table, string $column): bool {
         if (self::isMysql()) {
             $stmt = $db->prepare("
                 SELECT COUNT(*)
@@ -349,6 +365,19 @@ class Database {
             klasse         TEXT,
             mitarbeiter_id INTEGER NOT NULL,
             FOREIGN KEY(mitarbeiter_id) REFERENCES mitarbeiter(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS fuehrerscheinklassen (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            bezeichnung  TEXT NOT NULL UNIQUE
+        );
+
+        CREATE TABLE IF NOT EXISTS mitarbeiter_fuehrerscheinklassen (
+            mitarbeiter_id INTEGER NOT NULL,
+            klasse_id      INTEGER NOT NULL,
+            PRIMARY KEY (mitarbeiter_id, klasse_id),
+            FOREIGN KEY(mitarbeiter_id) REFERENCES mitarbeiter(id) ON DELETE CASCADE,
+            FOREIGN KEY(klasse_id)      REFERENCES fuehrerscheinklassen(id) ON DELETE CASCADE
         );
 
         CREATE TABLE IF NOT EXISTS dokumente (
@@ -535,6 +564,254 @@ class Database {
         );
         ";
         $db->exec($schema);
+    }
+
+    private static function ensureLicenseClassPool(PDO $db): void {
+        if (self::isMysql()) {
+            $db->exec("
+                CREATE TABLE IF NOT EXISTS fuehrerscheinklassen (
+                    id          INT AUTO_INCREMENT PRIMARY KEY,
+                    bezeichnung VARCHAR(120) NOT NULL UNIQUE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            ");
+            $db->exec("
+                CREATE TABLE IF NOT EXISTS mitarbeiter_fuehrerscheinklassen (
+                    mitarbeiter_id INT NOT NULL,
+                    klasse_id      INT NOT NULL,
+                    PRIMARY KEY (mitarbeiter_id, klasse_id),
+                    FOREIGN KEY (mitarbeiter_id) REFERENCES mitarbeiter(id) ON DELETE CASCADE,
+                    FOREIGN KEY (klasse_id) REFERENCES fuehrerscheinklassen(id) ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            ");
+        } else {
+            $db->exec("
+                CREATE TABLE IF NOT EXISTS fuehrerscheinklassen (
+                    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                    bezeichnung  TEXT NOT NULL UNIQUE
+                )
+            ");
+            $db->exec("
+                CREATE TABLE IF NOT EXISTS mitarbeiter_fuehrerscheinklassen (
+                    mitarbeiter_id INTEGER NOT NULL,
+                    klasse_id      INTEGER NOT NULL,
+                    PRIMARY KEY (mitarbeiter_id, klasse_id),
+                    FOREIGN KEY(mitarbeiter_id) REFERENCES mitarbeiter(id) ON DELETE CASCADE,
+                    FOREIGN KEY(klasse_id)      REFERENCES fuehrerscheinklassen(id) ON DELETE CASCADE
+                )
+            ");
+        }
+
+        if (self::readAppSetting($db, 'license_class_pool_migrated') === '1') {
+            return;
+        }
+
+        if (!self::tableExistsInternal($db, 'klassen') || !self::columnExistsInternal($db, 'klassen', 'mitarbeiter_id')) {
+            self::upsertAppSetting('license_class_pool_migrated', '1');
+            return;
+        }
+
+        $legacyRows = $db->query("
+            SELECT mitarbeiter_id, klasse
+            FROM klassen
+            WHERE klasse IS NOT NULL AND TRIM(klasse) != ''
+        ")->fetchAll();
+
+        if ($legacyRows === []) {
+            self::upsertAppSetting('license_class_pool_migrated', '1');
+            return;
+        }
+
+        $poolIdsByName = [];
+        $existingPool = $db->query('SELECT id, bezeichnung FROM fuehrerscheinklassen')->fetchAll();
+        foreach ($existingPool as $row) {
+            $key = strtolower(trim((string) ($row['bezeichnung'] ?? '')));
+            if ($key !== '') {
+                $poolIdsByName[$key] = (int) $row['id'];
+            }
+        }
+
+        $insertPool = $db->prepare('INSERT INTO fuehrerscheinklassen (bezeichnung) VALUES (?)');
+        if (self::isMysql()) {
+            $linkStmt = $db->prepare('
+                INSERT IGNORE INTO mitarbeiter_fuehrerscheinklassen (mitarbeiter_id, klasse_id)
+                VALUES (?, ?)
+            ');
+        } else {
+            $linkStmt = $db->prepare('
+                INSERT OR IGNORE INTO mitarbeiter_fuehrerscheinklassen (mitarbeiter_id, klasse_id)
+                VALUES (?, ?)
+            ');
+        }
+        $employeeExists = $db->prepare('SELECT 1 FROM mitarbeiter WHERE id = ? LIMIT 1');
+
+        foreach ($legacyRows as $row) {
+            $label = trim((string) ($row['klasse'] ?? ''));
+            $employeeId = (int) ($row['mitarbeiter_id'] ?? 0);
+            if ($label === '' || $employeeId <= 0) {
+                continue;
+            }
+            $employeeExists->execute([$employeeId]);
+            if (!$employeeExists->fetchColumn()) {
+                continue;
+            }
+            $key = strtolower($label);
+            if (!isset($poolIdsByName[$key])) {
+                try {
+                    $insertPool->execute([$label]);
+                    $poolIdsByName[$key] = (int) $db->lastInsertId();
+                } catch (\PDOException $e) {
+                    $lookup = $db->prepare('SELECT id FROM fuehrerscheinklassen WHERE LOWER(bezeichnung) = ? LIMIT 1');
+                    $lookup->execute([$key]);
+                    $found = (int) $lookup->fetchColumn();
+                    if ($found <= 0) {
+                        continue;
+                    }
+                    $poolIdsByName[$key] = $found;
+                }
+            }
+            $linkStmt->execute([$employeeId, $poolIdsByName[$key]]);
+        }
+
+        self::upsertAppSetting('license_class_pool_migrated', '1');
+    }
+
+    private static function ensureAbteilungPool(PDO $db): void {
+        if (self::isMysql()) {
+            $db->exec("
+                CREATE TABLE IF NOT EXISTS abteilungen (
+                    id          INT AUTO_INCREMENT PRIMARY KEY,
+                    bezeichnung VARCHAR(120) NOT NULL UNIQUE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            ");
+            $db->exec("
+                CREATE TABLE IF NOT EXISTS mitarbeiter_abteilungen (
+                    mitarbeiter_id INT NOT NULL,
+                    abteilung_id   INT NOT NULL,
+                    PRIMARY KEY (mitarbeiter_id, abteilung_id),
+                    FOREIGN KEY (mitarbeiter_id) REFERENCES mitarbeiter(id) ON DELETE CASCADE,
+                    FOREIGN KEY (abteilung_id) REFERENCES abteilungen(id) ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            ");
+        } else {
+            $db->exec("
+                CREATE TABLE IF NOT EXISTS abteilungen (
+                    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                    bezeichnung  TEXT NOT NULL UNIQUE
+                )
+            ");
+            $db->exec("
+                CREATE TABLE IF NOT EXISTS mitarbeiter_abteilungen (
+                    mitarbeiter_id INTEGER NOT NULL,
+                    abteilung_id   INTEGER NOT NULL,
+                    PRIMARY KEY (mitarbeiter_id, abteilung_id),
+                    FOREIGN KEY(mitarbeiter_id) REFERENCES mitarbeiter(id) ON DELETE CASCADE,
+                    FOREIGN KEY(abteilung_id)   REFERENCES abteilungen(id) ON DELETE CASCADE
+                )
+            ");
+        }
+
+        if (self::readAppSetting($db, 'abteilung_pool_migrated') === '1') {
+            return;
+        }
+
+        if (!self::columnExists($db, 'mitarbeiter', 'position')) {
+            self::upsertAppSetting('abteilung_pool_migrated', '1');
+            return;
+        }
+
+        $legacyRows = $db->query("
+            SELECT id, position
+            FROM mitarbeiter
+            WHERE position IS NOT NULL AND TRIM(position) != ''
+        ")->fetchAll();
+
+        if ($legacyRows === []) {
+            self::upsertAppSetting('abteilung_pool_migrated', '1');
+            return;
+        }
+
+        $poolIdsByName = [];
+        $existingPool = $db->query('SELECT id, bezeichnung FROM abteilungen')->fetchAll();
+        foreach ($existingPool as $row) {
+            $key = strtolower(trim((string) ($row['bezeichnung'] ?? '')));
+            if ($key !== '') {
+                $poolIdsByName[$key] = (int) $row['id'];
+            }
+        }
+
+        $insertPool = $db->prepare('INSERT INTO abteilungen (bezeichnung) VALUES (?)');
+        if (self::isMysql()) {
+            $linkStmt = $db->prepare('
+                INSERT IGNORE INTO mitarbeiter_abteilungen (mitarbeiter_id, abteilung_id)
+                VALUES (?, ?)
+            ');
+        } else {
+            $linkStmt = $db->prepare('
+                INSERT OR IGNORE INTO mitarbeiter_abteilungen (mitarbeiter_id, abteilung_id)
+                VALUES (?, ?)
+            ');
+        }
+
+        foreach ($legacyRows as $row) {
+            $label = trim((string) ($row['position'] ?? ''));
+            $employeeId = (int) ($row['id'] ?? 0);
+            if ($label === '' || $employeeId <= 0) {
+                continue;
+            }
+            $key = strtolower($label);
+            if (!isset($poolIdsByName[$key])) {
+                try {
+                    $insertPool->execute([$label]);
+                    $poolIdsByName[$key] = (int) $db->lastInsertId();
+                } catch (\PDOException $e) {
+                    $lookup = $db->prepare('SELECT id FROM abteilungen WHERE LOWER(bezeichnung) = ? LIMIT 1');
+                    $lookup->execute([$key]);
+                    $found = (int) $lookup->fetchColumn();
+                    if ($found <= 0) {
+                        continue;
+                    }
+                    $poolIdsByName[$key] = $found;
+                }
+            }
+            $linkStmt->execute([$employeeId, $poolIdsByName[$key]]);
+        }
+
+        self::upsertAppSetting('abteilung_pool_migrated', '1');
+    }
+
+    /** Pool-Migration erneut ausführen (z. B. nach Legacy-Import). */
+    public static function migrateLegacyAssignmentPools(): void {
+        $db = self::getConnection();
+        self::ensureLicenseClassPool($db);
+        self::ensureAbteilungPool($db);
+    }
+
+    private static function readAppSetting(PDO $db, string $key): ?string {
+        if (!self::tableExists($db, 'app_settings')) {
+            return null;
+        }
+        if (self::isMysql()) {
+            $stmt = $db->prepare('SELECT `value` FROM app_settings WHERE `key` = ? LIMIT 1');
+        } else {
+            $stmt = $db->prepare('SELECT value FROM app_settings WHERE key = ? LIMIT 1');
+        }
+        $stmt->execute([$key]);
+        $val = $stmt->fetchColumn();
+        return $val === false ? null : (string) $val;
+    }
+
+    private static function tableExistsInternal(PDO $db, string $table): bool {
+        if (self::isMysql()) {
+            $stmt = $db->prepare("
+                SELECT COUNT(*) FROM information_schema.tables
+                WHERE table_schema = DATABASE() AND table_name = ?
+            ");
+            $stmt->execute([$table]);
+            return (int) $stmt->fetchColumn() > 0;
+        }
+        $stmt = $db->prepare("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?");
+        $stmt->execute([$table]);
+        return (int) $stmt->fetchColumn() > 0;
     }
 
     public static function reseed(): void {

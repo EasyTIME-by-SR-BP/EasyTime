@@ -70,10 +70,40 @@ jobs:
             ENV_FILE="$REPO_DIR/.env"
             touch "$ENV_FILE"
 
-            OLD_DB=$(grep -E '^DB_PASSWORD=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- | tr -d '\r' || true)
-            OLD_ROOT=$(grep -E '^MYSQL_ROOT_PASSWORD=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- | tr -d '\r' || true)
-            DB_PASSWORD="${OLD_DB:-${{ secrets.DB_PASSWORD }}}"
-            MYSQL_ROOT_PASSWORD="${OLD_ROOT:-${{ secrets.MYSQL_ROOT_PASSWORD }}}"
+            read_env() {
+              grep -E "^$1=" "$ENV_FILE" 2>/dev/null | cut -d= -f2- | tr -d '\r' || true
+            }
+
+            pick_env() {
+              local key="$1"
+              local gh_value="$2"
+              local default_value="$3"
+              local old
+              old="$(read_env "$key")"
+              if [ -n "$old" ]; then
+                printf '%s' "$old"
+              elif [ -n "$gh_value" ]; then
+                printf '%s' "$gh_value"
+              else
+                printf '%s' "$default_value"
+              fi
+            }
+
+            DB_PASSWORD="$(pick_env DB_PASSWORD '${{ secrets.DB_PASSWORD }}' '')"
+            MYSQL_ROOT_PASSWORD="$(pick_env MYSQL_ROOT_PASSWORD '${{ secrets.MYSQL_ROOT_PASSWORD }}' '')"
+
+            APP_URL="$(pick_env APP_URL '${{ vars.APP_URL }}' '')"
+            MAIL_ENABLED="$(pick_env MAIL_ENABLED '${{ vars.MAIL_ENABLED }}' 'false')"
+            MAIL_FROM_ADDRESS="$(pick_env MAIL_FROM_ADDRESS '${{ vars.MAIL_FROM_ADDRESS }}' '')"
+            MAIL_FROM_NAME="$(pick_env MAIL_FROM_NAME '${{ vars.MAIL_FROM_NAME }}' 'EasyTime')"
+            MAIL_HOST="$(pick_env MAIL_HOST '${{ vars.MAIL_HOST }}' '')"
+            MAIL_PORT="$(pick_env MAIL_PORT '${{ vars.MAIL_PORT }}' '')"
+            MAIL_USERNAME="$(pick_env MAIL_USERNAME '${{ secrets.MAIL_USERNAME }}' '')"
+            MAIL_PASSWORD="$(pick_env MAIL_PASSWORD '${{ secrets.MAIL_PASSWORD }}' '')"
+            MAIL_ENCRYPTION="$(pick_env MAIL_ENCRYPTION '${{ vars.MAIL_ENCRYPTION }}' 'tls')"
+            MAIL_SMTP_AUTH="$(pick_env MAIL_SMTP_AUTH '${{ vars.MAIL_SMTP_AUTH }}' 'true')"
+            MAIL_NOTIFY_TASKS="$(pick_env MAIL_NOTIFY_TASKS '${{ vars.MAIL_NOTIFY_TASKS }}' 'true')"
+            MAIL_NOTIFY_INFO="$(pick_env MAIL_NOTIFY_INFO '${{ vars.MAIL_NOTIFY_INFO }}' 'false')"
 
             cat > "$ENV_FILE" <<EOF
             APP_PORT=8080
@@ -86,6 +116,18 @@ jobs:
             DB_USERNAME=easytime
             DB_PASSWORD=${DB_PASSWORD}
             MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+            APP_URL=${APP_URL}
+            MAIL_ENABLED=${MAIL_ENABLED}
+            MAIL_FROM_ADDRESS=${MAIL_FROM_ADDRESS}
+            MAIL_FROM_NAME=${MAIL_FROM_NAME}
+            MAIL_HOST=${MAIL_HOST}
+            MAIL_PORT=${MAIL_PORT}
+            MAIL_USERNAME=${MAIL_USERNAME}
+            MAIL_PASSWORD=${MAIL_PASSWORD}
+            MAIL_ENCRYPTION=${MAIL_ENCRYPTION}
+            MAIL_SMTP_AUTH=${MAIL_SMTP_AUTH}
+            MAIL_NOTIFY_TASKS=${MAIL_NOTIFY_TASKS}
+            MAIL_NOTIFY_INFO=${MAIL_NOTIFY_INFO}
             EOF
 
             run_compose() {

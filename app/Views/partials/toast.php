@@ -16,6 +16,7 @@ $etToastMessages = [
         'blocked_exists' => ['text' => I18n::get('msg.blocked_exists'), 'duration' => 6000],
         'past_date' => ['text' => I18n::get('msg.past_date'), 'duration' => 6000],
         'coverage_conflict' => ['text' => I18n::get('msg.coverage_conflict'), 'duration' => 6000],
+        'coverage_request_denied' => ['text' => I18n::get('msg.coverage_request_denied'), 'duration' => 7000],
         'fenstertage_exceeded' => ['text' => I18n::get('msg.fenstertage_exceeded'), 'duration' => 6000],
         'insufficient_balance' => ['text' => I18n::get('msg.insufficient_balance'), 'duration' => 6000],
         'self_delete_forbidden' => ['text' => I18n::get('msg.self_delete_forbidden'), 'duration' => 6000],
@@ -26,6 +27,8 @@ $etToastMessages = [
         'login_failed' => ['text' => I18n::get('login.invalid_credentials'), 'duration' => 6000],
         'invalid_token' => ['text' => I18n::get('msg.invalid_token'), 'duration' => 6000],
         'employee_failed' => ['text' => I18n::get('msg.employee_failed'), 'duration' => 6000],
+        'settings_pool_failed' => ['text' => I18n::get('settings.pool_failed'), 'duration' => 6000],
+        'settings_pool_in_use' => ['text' => I18n::get('settings.pool_in_use'), 'duration' => 6000],
         '_default' => ['text' => I18n::get('msg.generic_error'), 'duration' => 6000],
     ],
 ];

@@ -80,6 +80,10 @@ class DatabaseSeeder {
             'event',
             'urlaubssperre',
             'standort_vertretung',
+            'mitarbeiter_fuehrerscheinklassen',
+            'fuehrerscheinklassen',
+            'mitarbeiter_abteilungen',
+            'abteilungen',
             'klassen',
             'eintritt',
             'abmeldung',
@@ -175,11 +179,45 @@ class DatabaseSeeder {
         $d = static fn (string $modifier): string => $today->modify($modifier)->format('Y-m-d');
         $yearStart = $today->format('Y') . '-01-01';
 
-        $classId = 1;
+        $classNames = [];
         foreach (self::USERS as $user) {
-            $db->prepare('INSERT INTO klassen (id, klasse, mitarbeiter_id) VALUES (?, ?, ?)')
-                ->execute([$classId, $user['klasse'], $user['id']]);
+            $classNames[(string) $user['klasse']] = true;
+        }
+        $classId = 1;
+        $nameToId = [];
+        $poolStmt = $db->prepare('INSERT INTO fuehrerscheinklassen (id, bezeichnung) VALUES (?, ?)');
+        $linkStmt = $db->prepare('INSERT INTO mitarbeiter_fuehrerscheinklassen (mitarbeiter_id, klasse_id) VALUES (?, ?)');
+        foreach (array_keys($classNames) as $className) {
+            $poolStmt->execute([$classId, $className]);
+            $nameToId[$className] = $classId;
             $classId++;
+        }
+        foreach (self::USERS as $user) {
+            $linkStmt->execute([(int) $user['id'], $nameToId[$user['klasse']]]);
+        }
+
+        $abteilungNames = [];
+        foreach (self::USERS as $user) {
+            $pos = trim((string) ($user['position'] ?? ''));
+            if ($pos !== '') {
+                $abteilungNames[$pos] = true;
+            }
+        }
+        $abteilungId = 1;
+        $abteilungNameToId = [];
+        $abteilungPoolStmt = $db->prepare('INSERT INTO abteilungen (id, bezeichnung) VALUES (?, ?)');
+        $abteilungLinkStmt = $db->prepare('INSERT INTO mitarbeiter_abteilungen (mitarbeiter_id, abteilung_id) VALUES (?, ?)');
+        foreach (array_keys($abteilungNames) as $abteilungName) {
+            $abteilungPoolStmt->execute([$abteilungId, $abteilungName]);
+            $abteilungNameToId[$abteilungName] = $abteilungId;
+            $abteilungId++;
+        }
+        foreach (self::USERS as $user) {
+            $pos = trim((string) ($user['position'] ?? ''));
+            if ($pos === '' || !isset($abteilungNameToId[$pos])) {
+                continue;
+            }
+            $abteilungLinkStmt->execute([(int) $user['id'], $abteilungNameToId[$pos]]);
         }
 
         $db->exec("

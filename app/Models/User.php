@@ -23,10 +23,108 @@ class User {
             'role' => self::normalizeRole($row['berechtigung'] ?? null),
             'vacation_entitlement_days' => (int) ($row['urlaubsanspruch'] ?? 0),
             'overtime_hours' => isset($row['overtime_hours']) ? (float) $row['overtime_hours'] : 0.0,
-            'department_id' => isset($row['department_id']) ? (int) $row['department_id'] : null,
-            'department_name' => $row['department_name'] ?? null,
-            'department_color' => null,
+            'license_classes' => [],
+            'license_class_ids' => [],
+            'abteilungen' => [],
+            'abteilung_ids' => [],
+            'standorte' => [],
+            'standort_ids' => [],
+            'primary_standort_id' => null,
         ];
+    }
+
+    /** @param list<array<string, mixed>> $users @return list<array<string, mixed>> */
+    private static function attachAssignments(array $users): array {
+        if ($users === []) {
+            return $users;
+        }
+        $ids = array_values(array_filter(array_map(static fn (array $u): int => (int) ($u['id'] ?? 0), $users)));
+        if ($ids === []) {
+            return $users;
+        }
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $db = Database::getConnection();
+
+        $classStmt = $db->prepare("
+            SELECT mf.mitarbeiter_id, fk.id, fk.bezeichnung
+            FROM mitarbeiter_fuehrerscheinklassen mf
+            JOIN fuehrerscheinklassen fk ON fk.id = mf.klasse_id
+            WHERE mf.mitarbeiter_id IN ({$placeholders})
+            ORDER BY fk.bezeichnung ASC
+        ");
+        $classStmt->execute($ids);
+        $classesByUser = [];
+        foreach ($classStmt->fetchAll() as $row) {
+            $uid = (int) ($row['mitarbeiter_id'] ?? 0);
+            $classesByUser[$uid][] = [
+                'id' => (int) ($row['id'] ?? 0),
+                'name' => (string) ($row['bezeichnung'] ?? ''),
+            ];
+        }
+
+        $standortStmt = $db->prepare("
+            SELECT ms.mitarbeiter_id, ms.basis, s.id, s.ort, s.kostenstelle
+            FROM mitarbeiter_standorte ms
+            JOIN standorte s ON s.id = ms.standort_id
+            WHERE ms.mitarbeiter_id IN ({$placeholders})
+            ORDER BY ms.basis DESC, s.ort ASC
+        ");
+        $standortStmt->execute($ids);
+        $standorteByUser = [];
+        foreach ($standortStmt->fetchAll() as $row) {
+            $uid = (int) ($row['mitarbeiter_id'] ?? 0);
+            $sid = (int) ($row['id'] ?? 0);
+            $standorteByUser[$uid][] = [
+                'id' => $sid,
+                'ort' => (string) ($row['ort'] ?? ''),
+                'kostenstelle' => isset($row['kostenstelle']) ? (int) $row['kostenstelle'] : null,
+                'basis' => (int) ($row['basis'] ?? 0) === 1,
+            ];
+        }
+
+        $abteilungStmt = $db->prepare("
+            SELECT ma.mitarbeiter_id, a.id, a.bezeichnung
+            FROM mitarbeiter_abteilungen ma
+            JOIN abteilungen a ON a.id = ma.abteilung_id
+            WHERE ma.mitarbeiter_id IN ({$placeholders})
+            ORDER BY a.bezeichnung ASC
+        ");
+        $abteilungStmt->execute($ids);
+        $abteilungenByUser = [];
+        foreach ($abteilungStmt->fetchAll() as $row) {
+            $uid = (int) ($row['mitarbeiter_id'] ?? 0);
+            $abteilungenByUser[$uid][] = [
+                'id' => (int) ($row['id'] ?? 0),
+                'name' => (string) ($row['bezeichnung'] ?? ''),
+            ];
+        }
+
+        foreach ($users as &$user) {
+            $uid = (int) ($user['id'] ?? 0);
+            $classes = $classesByUser[$uid] ?? [];
+            $standorte = $standorteByUser[$uid] ?? [];
+            $abteilungen = $abteilungenByUser[$uid] ?? [];
+            $user['license_classes'] = $classes;
+            $user['license_class_ids'] = array_map(static fn (array $c): int => (int) $c['id'], $classes);
+            $user['abteilungen'] = $abteilungen;
+            $user['abteilung_ids'] = array_map(static fn (array $a): int => (int) $a['id'], $abteilungen);
+            $user['standorte'] = $standorte;
+            $user['standort_ids'] = array_map(static fn (array $s): int => (int) $s['id'], $standorte);
+            $primary = null;
+            foreach ($standorte as $standort) {
+                if (!empty($standort['basis'])) {
+                    $primary = (int) $standort['id'];
+                    break;
+                }
+            }
+            if ($primary === null && $standorte !== []) {
+                $primary = (int) $standorte[0]['id'];
+            }
+            $user['primary_standort_id'] = $primary;
+        }
+        unset($user);
+
+        return $users;
     }
 
     public static function getAll() {
@@ -34,20 +132,6 @@ class User {
         $stmt = $db->query("
             SELECT
                 m.*,
-                (
-                    SELECT k.id
-                    FROM klassen k
-                    WHERE k.mitarbeiter_id = m.id
-                    ORDER BY k.id ASC
-                    LIMIT 1
-                ) AS department_id,
-                (
-                    SELECT k.klasse
-                    FROM klassen k
-                    WHERE k.mitarbeiter_id = m.id
-                    ORDER BY k.id ASC
-                    LIMIT 1
-                ) AS department_name,
                 (
                     SELECT u.uebertrag_ueberstunden
                     FROM uebertrag u
@@ -59,7 +143,8 @@ class User {
             ORDER BY m.nachname ASC, m.vorname ASC
         ");
         $rows = $stmt->fetchAll();
-        return array_map([self::class, 'mapEmployeeRow'], $rows);
+        $users = array_map([self::class, 'mapEmployeeRow'], $rows);
+        return self::attachAssignments($users);
     }
 
     public static function getById($id) {
@@ -67,20 +152,6 @@ class User {
         $stmt = $db->prepare("
             SELECT
                 m.*,
-                (
-                    SELECT k.id
-                    FROM klassen k
-                    WHERE k.mitarbeiter_id = m.id
-                    ORDER BY k.id ASC
-                    LIMIT 1
-                ) AS department_id,
-                (
-                    SELECT k.klasse
-                    FROM klassen k
-                    WHERE k.mitarbeiter_id = m.id
-                    ORDER BY k.id ASC
-                    LIMIT 1
-                ) AS department_name,
                 (
                     SELECT u.uebertrag_ueberstunden
                     FROM uebertrag u
@@ -97,7 +168,8 @@ class User {
         if (!$row) {
             return false;
         }
-        return self::mapEmployeeRow($row);
+        $user = self::mapEmployeeRow($row);
+        return self::attachAssignments([$user])[0];
     }
 
     /** @return list<int> */
@@ -138,7 +210,8 @@ class User {
             return false;
         }
 
-        return self::mapEmployeeRow($row);
+        $user = self::mapEmployeeRow($row);
+        return self::attachAssignments([$user])[0];
     }
 
     public static function findByEmailOrMnr(string $emailOrMnr): ?array {
@@ -155,7 +228,8 @@ class User {
         if (!$row) {
             return null;
         }
-        return self::mapEmployeeRow($row);
+        $user = self::mapEmployeeRow($row);
+        return self::attachAssignments([$user])[0];
     }
 
     private static function mapRoleToSchemaValue(string $role): string {
@@ -172,24 +246,52 @@ class User {
         return ctype_digit($trimmed) ? ('M' . str_pad($trimmed, 3, '0', STR_PAD_LEFT)) : $trimmed;
     }
 
-    private static function upsertClassForEmployee(int $employeeId, ?string $className): void {
-        $trimmed = trim((string) $className);
-        if ($trimmed === '') {
-            return;
-        }
-
+    /** @param list<int|string> $classIds */
+    private static function syncEmployeeLicenseClasses(int $employeeId, array $classIds): void {
+        $classIds = array_values(array_unique(array_filter(array_map('intval', $classIds), static fn (int $id): bool => $id > 0)));
         $db = Database::getConnection();
-        $existingStmt = $db->prepare("SELECT id FROM klassen WHERE mitarbeiter_id = ? LIMIT 1");
-        $existingStmt->execute([$employeeId]);
-        $existingId = $existingStmt->fetchColumn();
-        if ($existingId) {
-            $updateStmt = $db->prepare("UPDATE klassen SET klasse = ? WHERE id = ?");
-            $updateStmt->execute([$trimmed, $existingId]);
+        $db->prepare('DELETE FROM mitarbeiter_fuehrerscheinklassen WHERE mitarbeiter_id = ?')->execute([$employeeId]);
+        if ($classIds === []) {
             return;
         }
+        $stmt = $db->prepare('INSERT INTO mitarbeiter_fuehrerscheinklassen (mitarbeiter_id, klasse_id) VALUES (?, ?)');
+        foreach ($classIds as $classId) {
+            $stmt->execute([$employeeId, $classId]);
+        }
+    }
 
-        $insertStmt = $db->prepare("INSERT INTO klassen (klasse, mitarbeiter_id) VALUES (?, ?)");
-        $insertStmt->execute([$trimmed, $employeeId]);
+    /** @param list<int|string> $standortIds */
+    private static function syncEmployeeStandorte(int $employeeId, array $standortIds, ?int $primaryStandortId): void {
+        $standortIds = array_values(array_unique(array_filter(array_map('intval', $standortIds), static fn (int $id): bool => $id > 0)));
+        $basisId = null;
+        if ($primaryStandortId && in_array($primaryStandortId, $standortIds, true)) {
+            $basisId = $primaryStandortId;
+        } elseif ($standortIds !== []) {
+            $basisId = $standortIds[0];
+        }
+        $db = Database::getConnection();
+        $db->prepare('DELETE FROM mitarbeiter_standorte WHERE mitarbeiter_id = ?')->execute([$employeeId]);
+        if ($standortIds === []) {
+            return;
+        }
+        $stmt = $db->prepare('INSERT INTO mitarbeiter_standorte (mitarbeiter_id, standort_id, basis) VALUES (?, ?, ?)');
+        foreach ($standortIds as $standortId) {
+            $stmt->execute([$employeeId, $standortId, ($standortId === $basisId) ? 1 : 0]);
+        }
+    }
+
+    /** @param list<int|string> $abteilungIds */
+    private static function syncEmployeeAbteilungen(int $employeeId, array $abteilungIds): void {
+        $abteilungIds = array_values(array_unique(array_filter(array_map('intval', $abteilungIds), static fn (int $id): bool => $id > 0)));
+        $db = Database::getConnection();
+        $db->prepare('DELETE FROM mitarbeiter_abteilungen WHERE mitarbeiter_id = ?')->execute([$employeeId]);
+        if ($abteilungIds === []) {
+            return;
+        }
+        $stmt = $db->prepare('INSERT INTO mitarbeiter_abteilungen (mitarbeiter_id, abteilung_id) VALUES (?, ?)');
+        foreach ($abteilungIds as $abteilungId) {
+            $stmt->execute([$employeeId, $abteilungId]);
+        }
     }
 
     private static function upsertOvertime(int $employeeId, float $overtimeHours): void {
@@ -240,18 +342,12 @@ class User {
         return (string) $stmt->fetchColumn() === '1';
     }
 
-    public static function createEmployee($firstname, $lastname, $email, $mnr, $password, $role = 'Employee', $departmentId = null, $customColor = null, $vacationDays = 25, $overtimeHours = 0, $mustChangePassword = false) {
+    /** @param list<int|string>|null $licenseClassIds @param list<int|string>|null $abteilungIds @param list<int|string>|null $standortIds */
+    public static function createEmployee($firstname, $lastname, $email, $mnr, $password, $role = 'Employee', $licenseClassIds = null, $abteilungIds = null, $standortIds = null, $primaryStandortId = null, $vacationDays = 25, $overtimeHours = 0, $mustChangePassword = false) {
         $db = Database::getConnection();
         $staffId = self::normalizeStaffIdentifier((string) $mnr);
         if ($staffId === '') {
             return false;
-        }
-
-        $className = null;
-        if ($departmentId !== null && $departmentId !== '') {
-            $classStmt = $db->prepare("SELECT klasse FROM klassen WHERE id = ? LIMIT 1");
-            $classStmt->execute([(int) $departmentId]);
-            $className = $classStmt->fetchColumn() ?: null;
         }
 
         try {
@@ -271,7 +367,9 @@ class User {
             ]);
             $employeeId = (int) $db->lastInsertId();
 
-            self::upsertClassForEmployee($employeeId, $className);
+            self::syncEmployeeLicenseClasses($employeeId, is_array($licenseClassIds) ? $licenseClassIds : []);
+            self::syncEmployeeAbteilungen($employeeId, is_array($abteilungIds) ? $abteilungIds : []);
+            self::syncEmployeeStandorte($employeeId, is_array($standortIds) ? $standortIds : [], $primaryStandortId !== null ? (int) $primaryStandortId : null);
             self::upsertOvertime($employeeId, (float) $overtimeHours);
             if ($mustChangePassword) {
                 self::setMustChangePassword($employeeId, true);
@@ -287,18 +385,12 @@ class User {
         }
     }
 
-    public static function updateEmployee($id, $firstname, $lastname, $email, $mnr, $password = null, $role = 'Employee', $departmentId = null, $customColor = null, $vacationDays = 25, $overtimeHours = 0) {
+    /** @param list<int|string>|null $licenseClassIds @param list<int|string>|null $abteilungIds @param list<int|string>|null $standortIds */
+    public static function updateEmployee($id, $firstname, $lastname, $email, $mnr, $password = null, $role = 'Employee', $licenseClassIds = null, $abteilungIds = null, $standortIds = null, $primaryStandortId = null, $vacationDays = 25, $overtimeHours = 0) {
         $db = Database::getConnection();
         $staffId = self::normalizeStaffIdentifier((string) $mnr);
         if ($staffId === '') {
             return false;
-        }
-
-        $className = null;
-        if ($departmentId !== null && $departmentId !== '') {
-            $classStmt = $db->prepare("SELECT klasse FROM klassen WHERE id = ? LIMIT 1");
-            $classStmt->execute([(int) $departmentId]);
-            $className = $classStmt->fetchColumn() ?: null;
         }
 
         try {
@@ -323,7 +415,9 @@ class User {
                 $pwStmt->execute([$password, (int) $id]);
             }
 
-            self::upsertClassForEmployee((int) $id, $className);
+            self::syncEmployeeLicenseClasses((int) $id, is_array($licenseClassIds) ? $licenseClassIds : []);
+            self::syncEmployeeAbteilungen((int) $id, is_array($abteilungIds) ? $abteilungIds : []);
+            self::syncEmployeeStandorte((int) $id, is_array($standortIds) ? $standortIds : [], $primaryStandortId !== null ? (int) $primaryStandortId : null);
             self::upsertOvertime((int) $id, (float) $overtimeHours);
 
             $db->commit();
@@ -344,6 +438,8 @@ class User {
 
             $db->prepare("DELETE FROM urlaub_kommentar WHERE mitarbeiter_id = ?")->execute([$employeeId]);
             $db->prepare("DELETE FROM urlaub WHERE mitarbeiter_id = ?")->execute([$employeeId]);
+            $db->prepare("DELETE FROM mitarbeiter_fuehrerscheinklassen WHERE mitarbeiter_id = ?")->execute([$employeeId]);
+            $db->prepare("DELETE FROM mitarbeiter_abteilungen WHERE mitarbeiter_id = ?")->execute([$employeeId]);
             $db->prepare("DELETE FROM klassen WHERE mitarbeiter_id = ?")->execute([$employeeId]);
             $db->prepare("DELETE FROM mitarbeiter_dokumente WHERE mitarbeiter_id = ?")->execute([$employeeId]);
             $db->prepare("DELETE FROM mitarbeiter_standorte WHERE mitarbeiter_id = ?")->execute([$employeeId]);

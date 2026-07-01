@@ -4,6 +4,9 @@ use App\Services\Inbox;
 
 /** @var string $inboxFilter */
 /** @var array<string, int> $inboxCounts */
+/** @var int $highlightNotificationId */
+
+$highlightNotificationId = (int) ($highlightNotificationId ?? 0);
 
 $categoryLabels = [
     'approval' => 'Aufgabe',
@@ -66,8 +69,12 @@ $currentFilterCount = (int) ($inboxCounts[$inboxFilter] ?? count($notificationLi
                 $cardClass = $isOpenTask
                     ? 'border-[#E8007D]/25 bg-[#fff8fc]/50'
                     : ($isUnread ? 'border-lime-200 bg-[#fffdf2]/40' : 'border-lime-100 bg-white');
+                $isHighlighted = $highlightNotificationId > 0 && (int) ($note['id'] ?? 0) === $highlightNotificationId;
+                if ($isHighlighted) {
+                    $cardClass .= ' ring-2 ring-[#E8007D]/40 shadow-md';
+                }
             ?>
-            <article class="rounded-2xl border p-5 sm:p-6 transition-shadow hover:shadow-sm <?= $cardClass ?>">
+            <article id="notification-<?= (int) $note['id'] ?>" class="rounded-2xl border p-5 sm:p-6 transition-shadow hover:shadow-sm <?= $cardClass ?>">
                 <div class="flex flex-wrap items-start justify-between gap-3 mb-3">
                     <div class="flex items-center gap-2.5 min-w-0">
                         <?php if ($isUnread && !$isResolved): ?>
@@ -153,3 +160,8 @@ $currentFilterCount = (int) ($inboxCounts[$inboxFilter] ?? count($notificationLi
         <?php endif; ?>
     </div>
 </div>
+<?php if ($highlightNotificationId > 0): ?>
+<script>
+document.getElementById('notification-<?= (int) $highlightNotificationId ?>')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+</script>
+<?php endif; ?>

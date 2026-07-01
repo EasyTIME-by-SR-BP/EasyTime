@@ -20,6 +20,7 @@ $_ENV['DB_DRIVER'] = 'sqlite';
 $_SERVER['DB_DRIVER'] = 'sqlite';
 
 use App\Core\Database;
+use App\Core\AustrianHolidays;
 use App\Models\Request as VacationRequest;
 
 function assertTrue(bool $cond, string $msg): void {
@@ -36,9 +37,25 @@ function assertEquals(mixed $expected, mixed $actual, string $msg): void {
     echo "OK: {$msg}\n";
 }
 
-function futureRange(int $offsetStart, int $length): array {
-    $start = date('Y-m-d', strtotime("+{$offsetStart} days"));
-    $end = date('Y-m-d', strtotime('+' . ($offsetStart + $length - 1) . ' days'));
+function futureRange(int $offsetStart, int $workdays): array {
+    $cursor = strtotime("+{$offsetStart} days");
+    $start = null;
+    $end = null;
+    $count = 0;
+    while ($count < $workdays) {
+        $ymd = date('Y-m-d', $cursor);
+        $dow = (int) date('N', $cursor);
+        $year = (int) date('Y', $cursor);
+        $isHoliday = in_array($ymd, AustrianHolidays::getDatesForYear($year), true);
+        if ($dow <= 5 && !$isHoliday) {
+            if ($start === null) {
+                $start = $ymd;
+            }
+            $end = $ymd;
+            $count++;
+        }
+        $cursor = strtotime('+1 day', $cursor);
+    }
     return [$start, $end];
 }
 
@@ -114,10 +131,11 @@ assertEquals(0, $stats['approved'], 'approved cleared after cancel');
 assertEquals(0, $stats['planned'], 'planned cleared after cancel');
 assertEquals(10, $stats['remaining'], 'remaining fully restored after cancel');
 
-// 6) Insufficient balance
+// 6) Employee create is not blocked by app-side remaining balance
 [$s2, $e2] = futureRange(60, 11);
 $result = VacationRequest::create($employeeId, $s2, $e2);
-assertEquals('insufficient_balance', $result, 'create blocked when exceeding remaining');
+assertTrue(is_int($result) && $result > 0, 'create allowed even when exceeding remaining in app stats');
+VacationRequest::withdrawRequest((int) $result, $employeeId);
 
 // 7) IDOR withdraw
 [$s3, $e3] = futureRange(90, 2);

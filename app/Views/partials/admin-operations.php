@@ -23,7 +23,50 @@ $formatRange = static function (array $req): string {
     return date('d.m.Y', strtotime((string) $req['start_date'])) . ' – ' . date('d.m.Y', strtotime((string) $req['end_date']));
 };
 
-$renderApprovalCard = static function (array $req, bool $isStorno) use ($requestCommentsById, $labelClassCompact, $inputClassCompact, $formatRange, $datesWarningClass): void {
+$scheduleForRequest = static function (array $req, string $startDate, string $endDate): array {
+    if (!empty($req['schedule']) && is_array($req['schedule'])) {
+        return $req['schedule'];
+    }
+    if (!empty($req['wunsch_plan_json'])) {
+        $plan = json_decode((string) $req['wunsch_plan_json'], true);
+        if (is_array($plan) && !empty($plan['segments']) && is_array($plan['segments'])) {
+            return $plan['segments'];
+        }
+    }
+    return [];
+};
+
+$renderScheduleBlock = static function (array $req, string $startDate, string $endDate) use ($scheduleForRequest): void {
+    $uid = (int) ($req['user_id'] ?? 0);
+    $schedule = $scheduleForRequest($req, $startDate, $endDate);
+    $scheduleEnc = rawurlencode(json_encode($schedule, JSON_UNESCAPED_UNICODE));
+    $hoursLabel = htmlspecialchars((string) ($req['stunden_display'] ?? ''), ENT_QUOTES, 'UTF-8');
+    ?>
+    <details class="group rounded-lg border border-lime-200 bg-[#fffdf2]/40 open:bg-white mt-2">
+        <summary class="cursor-pointer list-none px-2.5 py-2 text-[11px] font-bold text-emerald-700 flex items-center justify-between gap-2 marker:content-none">
+            <span class="flex items-center gap-1.5">
+                <?= I18n::get('schedule.toggle_hours') ?>
+                <svg class="h-3 w-3 text-emerald-400 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </span>
+            <?php if ($hoursLabel !== ''): ?>
+                <span class="text-emerald-600 font-semibold tabular-nums shrink-0"><?= $hoursLabel ?> <?= I18n::get('schedule.hours_short') ?></span>
+            <?php endif; ?>
+        </summary>
+        <div class="px-2 pb-2 pt-0">
+            <input type="hidden" name="partial_schedule" value="0">
+            <input type="hidden" name="schedule_json" value="[]">
+            <div class="easytime-form-schedule-mount hidden"
+                data-schedule-user-id="<?= $uid ?>"
+                data-initial-start="<?= htmlspecialchars($startDate, ENT_QUOTES, 'UTF-8') ?>"
+                data-initial-end="<?= htmlspecialchars($endDate, ENT_QUOTES, 'UTF-8') ?>"
+                data-initial-schedule="<?= htmlspecialchars($scheduleEnc, ENT_QUOTES, 'UTF-8') ?>"></div>
+            <div class="easytime-form-schedule-editor max-h-44 overflow-y-auto"></div>
+        </div>
+    </details>
+    <?php
+};
+
+$renderApprovalCard = static function (array $req, bool $isStorno) use ($requestCommentsById, $labelClassCompact, $inputClassCompact, $formatRange, $datesWarningClass, $renderScheduleBlock): void {
     $rid = (int) ($req['id'] ?? 0);
     $borderClass = $isStorno ? 'border-orange-300' : 'border-amber-200';
     ?>
@@ -65,6 +108,7 @@ $renderApprovalCard = static function (array $req, bool $isStorno) use ($request
                     </div>
                 </div>
                 <div class="<?= $datesWarningClass ?>" role="alert"><?= I18n::get('ceo.dates_changed_panel') ?></div>
+                <?php $renderScheduleBlock($req, (string) $req['start_date'], (string) $req['end_date']); ?>
             <?php endif; ?>
             <input id="comment-<?= $rid ?>" type="text" name="admin_comment" placeholder="<?= htmlspecialchars(I18n::get('ceo.decision_comment_ph')) ?>" class="<?= $inputClassCompact ?>">
             <div class="grid grid-cols-2 gap-2">
@@ -93,7 +137,7 @@ $renderApprovalCard = static function (array $req, bool $isStorno) use ($request
     <?php
 };
 
-$renderChangeCard = static function (array $req) use ($requestCommentsById, $labelClassCompact, $inputClassCompact, $formatRange, $datesWarningClass): void {
+$renderChangeCard = static function (array $req) use ($requestCommentsById, $labelClassCompact, $inputClassCompact, $formatRange, $datesWarningClass, $renderScheduleBlock, $scheduleForRequest): void {
     $rid = (int) ($req['id'] ?? 0);
     $wStart = (string) ($req['wunsch_start_date'] ?? $req['start_date']);
     $wEnd = (string) ($req['wunsch_end_date'] ?? $req['end_date']);
@@ -139,6 +183,11 @@ $renderChangeCard = static function (array $req) use ($requestCommentsById, $lab
                 </div>
             </div>
             <div class="<?= $datesWarningClass ?>" role="alert"><?= I18n::get('ceo.dates_changed_panel_wunsch') ?></div>
+            <?php
+                $changeScheduleReq = $req;
+                $changeScheduleReq['schedule'] = $scheduleForRequest($req, $wStart, $wEnd);
+                $renderScheduleBlock($changeScheduleReq, $wStart, $wEnd);
+            ?>
             <input type="text" name="admin_comment" placeholder="<?= htmlspecialchars(I18n::get('ceo.decision_comment_ph')) ?>" class="<?= $inputClassCompact ?>">
             <div class="grid grid-cols-2 gap-2">
                 <button type="submit" name="decision" value="reject" class="text-red-600 hover:text-white hover:bg-red-500 border border-red-200 px-2 py-2 rounded-lg text-xs font-bold transition-colors"><?= I18n::get('ceo.reject_change') ?></button>
@@ -195,8 +244,8 @@ $renderChangeCard = static function (array $req) use ($requestCommentsById, $lab
         </div>
 
         <div class="calendar-side-panel min-w-0" data-tour="admin-side-panel">
-            <div class="bg-white p-4 sm:p-7 rounded-3xl shadow-xl border border-lime-100 overflow-hidden min-w-0">
-                <section id="admin-calendar-range-section" class="mb-6">
+            <div class="calendar-side-panel-scroll et-scrollbar bg-white p-4 sm:p-7 rounded-3xl shadow-xl border border-lime-100 min-w-0">
+                <section id="admin-calendar-range-section" class="mb-6" data-tour="panel-period-section">
                     <h3 class="text-xs font-bold uppercase tracking-[0.2em] text-[#E8007D] mb-4"><?= I18n::get('emp.panel_period') ?></h3>
                     <div class="space-y-4">
                         <div id="calendar-range-summary" class="hidden text-xl font-bold text-emerald-900 leading-tight tabular-nums"></div>
@@ -211,12 +260,20 @@ $renderChangeCard = static function (array $req) use ($requestCommentsById, $lab
                             </div>
                         </div>
                         <p id="calendar-range-hint" class="text-sm text-emerald-600/80 text-center max-w-[18rem] mx-auto"><?= I18n::get('ceo.range_empty') ?></p>
+                        <div id="calendar-range-schedule-wrap" class="hidden mt-3 rounded-xl border border-lime-200 bg-[#fffdf2]/50 p-3">
+                            <div id="calendar-range-schedule-body" class="max-h-52 overflow-y-auto"></div>
+                        </div>
+                        <div id="admin-schedule-booking-wrap" class="hidden mt-4">
+                            <input type="hidden" name="partial_schedule" id="admin-partial-schedule" form="calendar-action-vacation-form" value="0">
+                            <input type="hidden" name="schedule_json" id="admin-schedule-json" form="calendar-action-vacation-form" value="[]">
+                            <div id="admin-schedule-editor" class="max-h-56 overflow-y-auto"></div>
+                        </div>
                     </div>
                 </section>
 
                 <div class="h-px bg-gradient-to-r from-transparent via-lime-200 to-transparent mb-6" aria-hidden="true"></div>
 
-                <section id="admin-calendar-info-section" class="mb-6">
+                <section id="admin-calendar-info-section" class="mb-6" data-tour="panel-info-section">
                     <h3 class="text-xs font-bold uppercase tracking-[0.2em] text-emerald-500 mb-4"><?= I18n::get('emp.panel_info') ?></h3>
                     <div id="calendar-info-empty" class="relative overflow-hidden py-5 text-center">
                         <p class="relative text-base font-bold text-emerald-900"><?= I18n::get('ceo.info_empty_title') ?></p>
@@ -232,6 +289,9 @@ $renderChangeCard = static function (array $req) use ($requestCommentsById, $lab
                             <div class="rounded-xl border border-amber-200 bg-amber-50/80 p-3 text-center">
                                 <div class="text-[10px] uppercase font-bold text-amber-800"><?= I18n::get('ceo.capacity_absent') ?></div>
                                 <div class="text-2xl font-bold text-emerald-900 tabular-nums"><?= (int) ($capacitySummary['absent_approved'] ?? 0) ?></div>
+                                <?php if ((int) ($capacitySummary['absent_pending'] ?? 0) > 0): ?>
+                                    <div class="text-[10px] font-semibold text-amber-700 mt-0.5">+<?= (int) $capacitySummary['absent_pending'] ?> <?= I18n::get('ceo.capacity_pending') ?></div>
+                                <?php endif; ?>
                             </div>
                             <div class="rounded-xl border border-lime-200 bg-white p-3 text-center">
                                 <div class="text-[10px] uppercase font-bold text-emerald-500"><?= I18n::get('ceo.capacity_available') ?></div>
@@ -239,12 +299,16 @@ $renderChangeCard = static function (array $req) use ($requestCommentsById, $lab
                             </div>
                         </div>
                         <div id="calendar-info-meta" class="text-sm text-emerald-700 bg-[#fffdf2] border border-lime-200 rounded-xl p-3 hidden"></div>
+                        <div id="calendar-info-warnings" class="hidden text-sm bg-amber-50 border border-amber-200 rounded-xl p-3">
+                            <div class="font-semibold text-amber-900 mb-1.5"><?= I18n::get('coverage.warnings_title') ?></div>
+                            <ul id="calendar-info-warnings-list" class="list-disc list-inside text-amber-900/90 space-y-0.5 text-xs leading-relaxed"></ul>
+                        </div>
                     </div>
                 </section>
 
                 <div class="h-px bg-gradient-to-r from-transparent via-lime-200 to-transparent mb-6" aria-hidden="true"></div>
 
-                <section>
+                <section data-tour="panel-action-section">
                     <h3 class="text-xs font-bold uppercase tracking-[0.2em] text-emerald-500 mb-4"><?= I18n::get('emp.panel_action') ?></h3>
                     <div id="calendar-action-empty" class="relative overflow-hidden py-5 text-center">
                         <p class="relative text-base font-bold text-emerald-900"><?= I18n::get('ceo.action_empty_title') ?></p>
@@ -261,16 +325,7 @@ $renderChangeCard = static function (array $req) use ($requestCommentsById, $lab
                             <input type="hidden" name="confirm_past" value="">
                             <input type="hidden" id="vacation-form-start-date" name="start_date" value="">
                             <input type="hidden" id="vacation-form-end-date" name="end_date" value="">
-                            <div>
-                                <label class="<?= $labelClass ?>" for="admin-vacation-user"><?= I18n::get('ceo.select_employee') ?></label>
-                                <select id="admin-vacation-user" name="user_id" required class="<?= $inputClass ?>">
-                                    <option value=""><?= I18n::get('ceo.select_employee_ph') ?></option>
-                                    <?php foreach (($employees ?? []) as $empOpt): ?>
-                                        <?php if (($empOpt['role'] ?? '') !== 'Employee') continue; ?>
-                                        <option value="<?= (int) $empOpt['id'] ?>" data-employee-option="1"><?= htmlspecialchars($empOpt['firstname'] . ' ' . $empOpt['lastname']) ?></option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </div>
+                            <?php include __DIR__ . '/admin-vacation-employee-picker.php'; ?>
                             <div>
                                 <label class="<?= $labelClass ?>" for="admin-vacation-comment"><?= I18n::get('ceo.decision_comment') ?></label>
                                 <input id="admin-vacation-comment" type="text" name="admin_comment" class="<?= $inputClass ?>">

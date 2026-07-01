@@ -4,6 +4,17 @@ use App\Core\TourConfig;
 require_once __DIR__ . '/partials/tooltip.php';
 require_once __DIR__ . '/partials/nav-icons.php';
 if (!isset($currentRole)) exit;
+
+$employeeLookupForJs = [];
+if (!empty($employees)) {
+    foreach ($employees as $empRow) {
+        $employeeLookupForJs[(string) (int) $empRow['id']] = [
+            'license_classes' => $empRow['license_classes'] ?? [],
+            'abteilungen' => $empRow['abteilungen'] ?? [],
+            'standorte' => $empRow['standorte'] ?? [],
+        ];
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="<?= $_SESSION['lang'] ?? 'de' ?>" class="antialiased">
@@ -346,8 +357,7 @@ if (!isset($currentRole)) exit;
             min-width: 0;
             flex: 1 1 auto;
             overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
+            white-space: normal;
         }
         #ceo-employee-filter.is-pinned {
             position: fixed;
@@ -360,6 +370,27 @@ if (!isset($currentRole)) exit;
         }
         #ceo-employee-filter-dropdown {
             z-index: 45;
+        }
+        #admin-vacation-employee-picker-dropdown {
+            z-index: 55;
+        }
+        .admin-vacation-employee-picker-toggle[aria-expanded="true"] {
+            border-color: #E8007D;
+            box-shadow: 0 0 0 2px rgba(232, 0, 125, 0.15);
+        }
+        .admin-vacation-employee-picker-toggle[aria-expanded="true"] .admin-vacation-employee-picker-chevron {
+            transform: rotate(180deg);
+        }
+        .admin-vacation-employee-picker-item.is-selected {
+            background: #ecfccb;
+            color: #14532d;
+            font-weight: 600;
+        }
+        .admin-vacation-employee-picker-item.hidden {
+            display: none !important;
+        }
+        #admin-vacation-employee-picker-summary.has-value {
+            color: #064e3b;
         }
         #ceo-employee-filter-pin-btn.is-active {
             background-color: var(--et-accent) !important;
@@ -659,6 +690,43 @@ if (!isset($currentRole)) exit;
             .history-detail-panel {
                 left: var(--et-sidebar-w);
                 transition: left 0.2s ease;
+            }
+            @media (min-width: 1280px) {
+                .calendar-side-panel {
+                    position: sticky;
+                    top: 1rem;
+                    align-self: start;
+                }
+                .calendar-side-panel-scroll {
+                    overflow-x: hidden;
+                    overflow-y: auto;
+                    overscroll-behavior: contain;
+                    scrollbar-gutter: stable;
+                }
+                .calendar-side-panel-scroll.is-scrollable {
+                    overflow-y: scroll;
+                }
+                .calendar-side-panel-scroll.et-scrollbar {
+                    scrollbar-width: thin;
+                    scrollbar-color: #84cc16 #ecfccb;
+                }
+                .calendar-side-panel-scroll.et-scrollbar::-webkit-scrollbar {
+                    width: 9px;
+                }
+                .calendar-side-panel-scroll.et-scrollbar::-webkit-scrollbar-track {
+                    background: #ecfccb;
+                    border-radius: 999px;
+                    margin: 6px 0;
+                }
+                .calendar-side-panel-scroll.et-scrollbar::-webkit-scrollbar-thumb {
+                    background: #84cc16;
+                    border-radius: 999px;
+                    border: 2px solid #ecfccb;
+                    min-height: 48px;
+                }
+                .calendar-side-panel-scroll.et-scrollbar::-webkit-scrollbar-thumb:hover {
+                    background: #E8007D;
+                }
             }
         }
         :root {
@@ -1225,34 +1293,6 @@ if (!isset($currentRole)) exit;
 
         <?php if ($currentRole === 'Employee' && $activeTab === 'calendar'): ?>
             <div class="space-y-6 sm:space-y-8 min-w-0">
-                <div class="bg-white rounded-3xl border border-lime-100 shadow-xl p-4 sm:p-7 relative overflow-hidden min-w-0" data-tour="vacation-stats">
-                    <div class="pointer-events-none absolute -right-10 -top-10 h-36 w-36 rounded-full bg-lime-100/70 blur-3xl" aria-hidden="true"></div>
-                    <h3 class="text-xs font-bold uppercase tracking-[0.2em] text-emerald-500 mb-5 relative"><?= I18n::get('emp.vacation_stats') ?></h3>
-                    <div class="grid grid-cols-4 gap-3 sm:gap-8 relative">
-                        <div>
-                            <div class="text-2xl sm:text-4xl font-bold text-emerald-900 tabular-nums leading-none"><?= (int)($userVacationStats['entitlement'] ?? 0) ?></div>
-                            <div class="mt-1.5 sm:mt-2 text-[11px] sm:text-sm font-medium text-emerald-600 leading-tight"><?= I18n::get('emp.stats_total') ?></div>
-                        </div>
-                        <div>
-                            <div class="text-2xl sm:text-4xl font-bold text-emerald-900 tabular-nums leading-none"><?= (int)($userVacationStats['planned'] ?? 0) ?></div>
-                            <div class="mt-1.5 sm:mt-2 text-[11px] sm:text-sm font-medium text-emerald-600 leading-tight"><?= I18n::get('emp.stats_planned') ?></div>
-                        </div>
-                        <div>
-                            <div class="text-2xl sm:text-4xl font-bold text-emerald-900 tabular-nums leading-none"><?= (int)($userVacationStats['approved'] ?? 0) ?></div>
-                            <div class="mt-1.5 sm:mt-2 text-[11px] sm:text-sm font-medium text-emerald-600 leading-tight"><?= I18n::get('emp.stats_taken') ?></div>
-                        </div>
-                        <div>
-                            <div class="text-2xl sm:text-4xl font-bold text-[#E8007D] tabular-nums leading-none"><?= (int)($userVacationStats['remaining'] ?? 0) ?></div>
-                            <div class="mt-1.5 sm:mt-2 text-[11px] sm:text-sm font-medium text-emerald-600 leading-tight"><?= I18n::get('emp.stats_remaining') ?></div>
-                        </div>
-                    </div>
-                    <?php if (($maxFenstertage ?? 0) > 0): ?>
-                        <p class="mt-6 text-sm leading-relaxed text-emerald-600/90 relative border-t border-lime-100 pt-5">
-                            <?= sprintf(I18n::get('emp.max_fenstertage'), (int) $maxFenstertage) ?>
-                        </p>
-                    <?php endif; ?>
-                </div>
-
                 <div class="grid grid-cols-1 xl:grid-cols-3 gap-6 sm:gap-8 min-w-0">
                     <div class="xl:col-span-2 bg-white p-4 sm:p-7 rounded-3xl shadow-xl border border-lime-100 overflow-hidden min-w-0">
                         <h2 class="text-xs font-bold uppercase tracking-[0.2em] text-emerald-500 mb-2"><?= I18n::get('emp.calendar') ?></h2>
@@ -1272,28 +1312,36 @@ if (!isset($currentRole)) exit;
                     </div>
 
                     <div class="calendar-side-panel" data-tour="calendar-side-panel">
-                        <div class="bg-white p-6 sm:p-7 rounded-3xl shadow-xl border border-lime-100" x-data="vacationForm()">
-                            <section id="employee-calendar-range-section" class="mb-6">
+                        <div class="calendar-side-panel-scroll et-scrollbar bg-white p-6 sm:p-7 rounded-3xl shadow-xl border border-lime-100" x-data="vacationForm()">
+                            <section id="employee-calendar-range-section" class="mb-6" data-tour="panel-period-section">
                                 <h3 class="text-xs font-bold uppercase tracking-[0.2em] text-[#E8007D] mb-4"><?= I18n::get('emp.panel_period') ?></h3>
                                 <div class="space-y-4">
                                     <div id="employee-calendar-range-summary" class="hidden text-xl font-bold text-emerald-900 leading-tight tabular-nums"></div>
                                     <div id="employee-calendar-range-inputs" class="grid grid-cols-2 gap-3">
                                         <div>
                                             <label class="block text-sm font-semibold text-emerald-800 mb-1.5" for="employee-start-date"><?= I18n::get('emp.start_date') ?></label>
-                                            <input id="employee-start-date" form="employee-request-form" type="date" name="start_date" x-model="start" @change="calculateDays" min="<?= date('Y-m-d') ?>" required class="w-full bg-[#fffdf2] border border-lime-200 rounded-xl px-4 py-3 text-emerald-900 focus:ring-2 focus:ring-lime-400 outline-none transition-all">
+                                            <input id="employee-start-date" form="employee-request-form" type="date" name="start_date" x-model="start" @change="calculateDays(); checkCoverage()" min="<?= date('Y-m-d') ?>" required class="w-full bg-[#fffdf2] border border-lime-200 rounded-xl px-4 py-3 text-emerald-900 focus:ring-2 focus:ring-lime-400 outline-none transition-all">
                                         </div>
                                         <div>
                                             <label class="block text-sm font-semibold text-emerald-800 mb-1.5" for="employee-end-date"><?= I18n::get('emp.end_date') ?></label>
-                                            <input id="employee-end-date" form="employee-request-form" type="date" name="end_date" x-model="end" @change="calculateDays" min="<?= date('Y-m-d') ?>" required class="w-full bg-[#fffdf2] border border-lime-200 rounded-xl px-4 py-3 text-emerald-900 focus:ring-2 focus:ring-lime-400 outline-none transition-all">
+                                            <input id="employee-end-date" form="employee-request-form" type="date" name="end_date" x-model="end" @change="calculateDays(); checkCoverage()" min="<?= date('Y-m-d') ?>" required class="w-full bg-[#fffdf2] border border-lime-200 rounded-xl px-4 py-3 text-emerald-900 focus:ring-2 focus:ring-lime-400 outline-none transition-all">
                                         </div>
                                     </div>
                                     <p id="employee-calendar-range-hint" class="text-sm text-emerald-600/80 text-center max-w-[18rem] mx-auto"><?= I18n::get('emp.calendar_range_empty') ?></p>
+                                    <div id="employee-calendar-range-schedule-wrap" class="hidden mt-3 rounded-xl border border-lime-200 bg-[#fffdf2]/50 p-3">
+                                        <div id="employee-calendar-range-schedule-body" class="max-h-52 overflow-y-auto"></div>
+                                    </div>
+                                    <div id="employee-schedule-booking-wrap" class="hidden mt-4">
+                                        <input type="hidden" name="partial_schedule" id="employee-partial-schedule" form="employee-request-form" value="0">
+                                        <input type="hidden" name="schedule_json" id="employee-schedule-json" form="employee-request-form" value="[]">
+                                        <div id="employee-schedule-editor" class="max-h-56 overflow-y-auto"></div>
+                                    </div>
                                 </div>
                             </section>
 
                             <div class="h-px bg-gradient-to-r from-transparent via-lime-200 to-transparent mb-6" aria-hidden="true"></div>
 
-                            <section id="employee-calendar-info-panel" class="mb-6">
+                            <section id="employee-calendar-info-panel" class="mb-6" data-tour="panel-info-section">
                                 <h3 class="text-xs font-bold uppercase tracking-[0.2em] text-emerald-500 mb-4"><?= I18n::get('emp.panel_info') ?></h3>
                                 <div id="employee-calendar-info-empty" class="relative overflow-hidden py-5 text-center">
                                     <p class="relative text-base font-bold text-emerald-900"><?= I18n::get('emp.calendar_info_empty_title') ?></p>
@@ -1306,7 +1354,7 @@ if (!isset($currentRole)) exit;
 
                             <div class="h-px bg-gradient-to-r from-transparent via-lime-200 to-transparent mb-6" aria-hidden="true"></div>
 
-                            <section>
+                            <section data-tour="panel-action-section">
                                 <h3 class="text-xs font-bold uppercase tracking-[0.2em] text-emerald-500 mb-4"><?= I18n::get('emp.panel_action') ?></h3>
                                 <div id="employee-calendar-action-empty" class="relative overflow-hidden py-5 text-center">
                                     <p class="relative text-base font-bold text-emerald-900"><?= I18n::get('emp.calendar_action_empty_title') ?></p>
@@ -1320,7 +1368,12 @@ if (!isset($currentRole)) exit;
                                             <span class="text-4xl font-bold text-emerald-900 tabular-nums" x-text="netDays">0</span>
                                             <input type="hidden" name="net_days" x-model="netDays">
                                         </div>
-                                        <button type="submit" class="w-full et-btn-primary font-bold py-3 px-4 rounded-xl shadow-lg shadow-lime-400/30 transition-all outline-none disabled:opacity-50 disabled:cursor-not-allowed" :disabled="netDays <= 0 || !start || !end">
+                                        <div x-show="coverageBlocked && coverageMessages.length" x-cloak class="text-xs leading-relaxed text-red-700 bg-red-50 border border-red-200 rounded-xl p-3 space-y-1">
+                                            <template x-for="(msg, idx) in coverageMessages.slice(0, 4)" :key="idx">
+                                                <div x-text="msg"></div>
+                                            </template>
+                                        </div>
+                                        <button type="submit" class="w-full et-btn-primary font-bold py-3 px-4 rounded-xl shadow-lg shadow-lime-400/30 transition-all outline-none disabled:opacity-50 disabled:cursor-not-allowed" :disabled="netDays <= 0 || !start || !end || coverageBlocked">
                                             <?= I18n::get('emp.send_request') ?>
                                         </button>
                                     </form>
@@ -1353,32 +1406,7 @@ if (!isset($currentRole)) exit;
             <?php include __DIR__ . '/partials/admin-team.php'; ?>
 
         <?php elseif (in_array($currentRole, ['CEO', 'Admin'], true) && $activeTab === 'settings'): ?>
-            <div class="space-y-6 max-w-3xl" data-tour="admin-settings">
-                <div>
-                    <h2 class="text-xs font-bold uppercase tracking-[0.2em] text-emerald-500 mb-2"><?= I18n::get('ceo.nav_settings') ?></h2>
-                    <p class="text-sm text-emerald-600/80 leading-relaxed"><?= I18n::get('settings.holidays_note') ?></p>
-                </div>
-                <div class="bg-white rounded-3xl p-6 sm:p-7 shadow-xl border border-lime-100 space-y-6">
-                    <form method="POST" action="/?action=update_min_staff" class="space-y-2">
-                        <label class="block text-sm font-semibold text-emerald-800" for="settings-min-staff"><?= I18n::get('settings.min_staff') ?></label>
-                        <div class="flex items-end gap-3">
-                            <input id="settings-min-staff" type="number" min="0" name="min_staff_available" value="<?= (int)($minStaffAvailable ?? 1) ?>" class="flex-1 w-full bg-[#fffdf2] border border-lime-200 rounded-xl px-4 py-3 text-sm text-emerald-900 outline-none focus:ring-2 focus:ring-lime-400">
-                            <button type="submit" class="et-btn-primary font-bold px-5 py-3 rounded-xl text-sm shrink-0"><?= I18n::get('ceo.save') ?></button>
-                        </div>
-                    </form>
-                    <div class="h-px bg-gradient-to-r from-transparent via-lime-200 to-transparent" aria-hidden="true"></div>
-                    <form method="POST" action="/?action=update_max_fenstertage" class="space-y-2">
-                        <label class="block text-sm font-semibold text-emerald-800" for="settings-max-fenstertage">
-                            <?= I18n::get('settings.max_fenstertage') ?>
-                            <span class="block text-xs font-normal text-emerald-600/80 mt-1"><?= I18n::get('settings.max_fenstertage_hint') ?></span>
-                        </label>
-                        <div class="flex items-end gap-3">
-                            <input id="settings-max-fenstertage" type="number" min="0" name="max_fenstertage" value="<?= (int)($maxFenstertage ?? 0) ?>" class="flex-1 w-full bg-[#fffdf2] border border-lime-200 rounded-xl px-4 py-3 text-sm text-emerald-900 outline-none focus:ring-2 focus:ring-lime-400">
-                            <button type="submit" class="et-btn-primary font-bold px-5 py-3 rounded-xl text-sm shrink-0"><?= I18n::get('ceo.save') ?></button>
-                        </div>
-                    </form>
-                </div>
-            </div>
+            <?php include __DIR__ . '/partials/admin-settings.php'; ?>
         <?php endif; ?>
         </main>
         </div>
@@ -1461,11 +1489,14 @@ if (!isset($currentRole)) exit;
         </div>
     </div>
 
+    <?php include __DIR__ . '/partials/vacation-schedule.js.php'; ?>
+
     <script>
         const fcEvents = <?= isset($fcEvents) ? json_encode($fcEvents) : '[]' ?>;
         const currentLang = '<?= $_SESSION['lang'] ?? 'de' ?>';
         const currentRole = '<?= $currentRole ?>';
         const requestLookup = <?= isset($requests) ? json_encode($requests) : '[]' ?>;
+        const employeeLookup = <?= json_encode($employeeLookupForJs, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
         const blockedPeriodLookup = <?= isset($blockedPeriods) ? json_encode($blockedPeriods) : '[]' ?>;
         const blockedRanges = fcEvents
             .filter((e) => e.extendedProps && e.extendedProps.isBlocked)
@@ -1517,6 +1548,13 @@ if (!isset($currentRole)) exit;
         const ceoActionSectionDecide = <?= json_encode(I18n::get('ceo.action_section_decide'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
         const ceoActionSectionChange = <?= json_encode(I18n::get('ceo.action_section_change'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
         const ceoActionSectionStorno = <?= json_encode(I18n::get('ceo.action_section_storno'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        const ceoStandorteLabel = <?= json_encode(I18n::get('ceo.standorte'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        const ceoAbteilungenLabel = <?= json_encode(I18n::get('ceo.abteilungen'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        const ceoLicenseClassesLabel = <?= json_encode(I18n::get('ceo.license_classes'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        const ceoStandorteEmpty = <?= json_encode(I18n::get('ceo.standorte_empty'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        const ceoAbteilungenEmpty = <?= json_encode(I18n::get('ceo.abteilungen_empty'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        const ceoLicenseClassesEmpty = <?= json_encode(I18n::get('ceo.license_classes_empty'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        const ceoStandortPrimaryShort = <?= json_encode(I18n::get('ceo.standort_primary_short'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
         const empActionSectionChange = <?= json_encode(I18n::get('emp.action_section_change'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
         const empActionSectionStorno = <?= json_encode(I18n::get('emp.action_section_storno'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
         const empActionSectionRetract = <?= json_encode(I18n::get('emp.action_section_retract'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
@@ -1527,9 +1565,11 @@ if (!isset($currentRole)) exit;
         const ceoEmployeeFilterPinLabel = <?= json_encode(I18n::get('ceo.employee_filter_pin'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
         const ceoEmployeeFilterUnpinLabel = <?= json_encode(I18n::get('ceo.employee_filter_unpin'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
         const ceoEmployeeFilterSummaryAll = <?= json_encode(I18n::get('ceo.employee_filter_summary_all'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
-        const ceoEmployeeFilterSummaryCount = <?= json_encode(I18n::get('ceo.employee_filter_summary_count'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
         const ceoEmployeeFilterBadgeAll = <?= json_encode(I18n::get('ceo.employee_filter_badge_all'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
-        const ceoEmployeeFilterBadgeCount = <?= json_encode(I18n::get('ceo.employee_filter_badge_count'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        const ceoEmployeeFilterSelectStandortAll = <?= json_encode(I18n::get('ceo.employee_filter_select_standort_all'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        const ceoEmployeeFilterSelectStandortNone = <?= json_encode(I18n::get('ceo.employee_filter_select_standort_none'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        const ceoEmployeeFilterDeselectStandortAll = <?= json_encode(I18n::get('ceo.employee_filter_deselect_standort_all'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        const ceoEmployeeFilterDeselectStandortNone = <?= json_encode(I18n::get('ceo.employee_filter_deselect_standort_none'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
         function formatAdminDateRange(startYmd, endYmd) {
             if (!startYmd || !endYmd) return '';
             const fmt = function(ymd) {
@@ -1713,21 +1753,21 @@ if (!isset($currentRole)) exit;
 
         const ceoPastRangeInfo = <?= json_encode(I18n::get('ceo.past_range_info'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
         const ceoValidationSelectEmployee = <?= json_encode(I18n::get('ceo.validation_select_employee'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        const ceoSelectEmployeePh = <?= json_encode(I18n::get('ceo.select_employee_ph'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
         const ceoValidationSelectRange = <?= json_encode(I18n::get('ceo.validation_select_range'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
         const ceoValidationInvalidRange = <?= json_encode(I18n::get('ceo.validation_invalid_range'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
         const msgBlockedPeriod = <?= json_encode(I18n::get('msg.blocked_period'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
         const msgRequestConflict = <?= json_encode(I18n::get('msg.request_conflict'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
         let employeeRangeAnchor = null;
         const todayYmd = '<?= date('Y-m-d') ?>';
-        const employeeVacationRemaining = <?= ($currentRole === 'Employee') ? (int)($userVacationStats['remaining'] ?? 0) : 0 ?>;
         const empPastWarningFull = <?= json_encode(I18n::get('emp.past_date_warning_full'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
         const empPastWarningPartial = <?= json_encode(I18n::get('emp.past_date_warning_partial'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        const empCoverageBlockedLabel = <?= json_encode(I18n::get('emp.coverage_blocked'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        const empCoverageRequestDenied = <?= json_encode(I18n::get('msg.coverage_request_denied'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
         const empPastInfo = <?= json_encode(I18n::get('emp.past_date_info'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
         const empUnbookableInfo = <?= json_encode(I18n::get('emp.unbookable_date_info'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
         const empBlockedWarning = <?= json_encode(I18n::get('emp.blocked_date_warning'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
         const empOccupiedWarning = <?= json_encode(I18n::get('emp.occupied_date_warning'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
-        const empNoBalanceZero = <?= json_encode(I18n::get('emp.no_balance_zero'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
-        const empNoBalanceExceeded = <?= json_encode(I18n::get('emp.no_balance_exceeded'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
         const showCancelledVacationKey = 'easytime_employee_show_cancelled';
         const showCancelledCeoKey = 'easytime_ceo_show_cancelled';
 
@@ -1817,8 +1857,10 @@ if (!isset($currentRole)) exit;
             if (pinBtn) {
                 pinBtn.classList.toggle('is-active', pinned);
                 pinBtn.setAttribute('aria-pressed', pinned ? 'true' : 'false');
-                pinBtn.title = pinned ? ceoEmployeeFilterUnpinLabel : ceoEmployeeFilterPinLabel;
-                pinBtn.setAttribute('aria-label', pinned ? ceoEmployeeFilterUnpinLabel : ceoEmployeeFilterPinLabel);
+                const pinLabel = pinned ? ceoEmployeeFilterUnpinLabel : ceoEmployeeFilterPinLabel;
+                pinBtn.setAttribute('aria-label', pinLabel);
+                const pinTooltip = document.getElementById('ceo-employee-filter-pin-tooltip');
+                if (pinTooltip) pinTooltip.textContent = pinLabel;
             }
             applyCeoEmployeeFilterPinLayout(pinGeometry);
         }
@@ -1884,20 +1926,63 @@ if (!isset($currentRole)) exit;
             }
         }
 
+        function getCeoEmployeeSelectedDisplayNames() {
+            const names = [];
+            document.querySelectorAll('.ceo-employee-filter-cb:checked').forEach((cb) => {
+                const item = cb.closest('.ceo-employee-filter-item');
+                if (!item) return;
+                const name = (item.dataset.employeeDisplayName || '').trim();
+                if (name) names.push(name);
+            });
+            return names.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+        }
+
+        function buildCeoEmployeeFilterSummaryLabel() {
+            const summary = document.getElementById('ceo-employee-filter-summary');
+            const names = getCeoEmployeeSelectedDisplayNames();
+            const nameSep = ', ';
+
+            if (names.length === 0) {
+                return { text: ceoEmployeeFilterBadgeAll, title: ceoEmployeeFilterSummaryAll };
+            }
+
+            const fullTitle = names.join(nameSep);
+
+            if (!summary) {
+                return { text: fullTitle, title: fullTitle };
+            }
+
+            const tryText = (visibleCount) => {
+                const hidden = names.length - visibleCount;
+                let text = names.slice(0, visibleCount).join(nameSep);
+                if (hidden > 0) {
+                    text += ' +' + hidden;
+                }
+                return text;
+            };
+
+            summary.textContent = tryText(names.length);
+            if (summary.scrollWidth <= summary.clientWidth) {
+                return { text: summary.textContent, title: fullTitle };
+            }
+
+            for (let visible = names.length - 1; visible >= 1; visible--) {
+                const text = tryText(visible);
+                summary.textContent = text;
+                if (summary.scrollWidth <= summary.clientWidth) {
+                    return { text, title: fullTitle };
+                }
+            }
+
+            return { text: '+' + names.length, title: fullTitle };
+        }
+
         function updateCeoEmployeeFilterSummary() {
             const summary = document.getElementById('ceo-employee-filter-summary');
             if (!summary) return;
-            const total = document.querySelectorAll('.ceo-employee-filter-cb').length;
-            const selected = getCeoEmployeeFilterSelectedIds();
-            if (!selected) {
-                summary.textContent = ceoEmployeeFilterBadgeAll;
-                summary.title = ceoEmployeeFilterSummaryAll;
-                return;
-            }
-            summary.textContent = ceoEmployeeFilterBadgeCount.replace('{count}', String(selected.size));
-            summary.title = ceoEmployeeFilterSummaryCount
-                .replace('{count}', String(selected.size))
-                .replace('{total}', String(total));
+            const built = buildCeoEmployeeFilterSummaryLabel();
+            summary.textContent = built.text;
+            summary.title = built.title;
         }
 
         function setCeoEmployeeFilterDropdownOpen(open) {
@@ -1921,33 +2006,320 @@ if (!isset($currentRole)) exit;
             }
         }
 
+        function getCeoEmployeeFilterStandortId() {
+            return document.getElementById('ceo-employee-filter-standort')?.value ?? '';
+        }
+
+        function getCeoEmployeeFilterStandortLabel() {
+            const select = document.getElementById('ceo-employee-filter-standort');
+            if (!select || !select.value) return '';
+            const opt = select.options[select.selectedIndex];
+            return opt ? opt.textContent.trim() : '';
+        }
+
+        function ceoEmployeeFilterItemMatchesStandort(item, standortId) {
+            if (!standortId) return true;
+            const ids = (item.dataset.standortIds || '').split(',').filter(Boolean);
+            if (standortId === 'none') {
+                return ids.length === 0;
+            }
+            return ids.includes(String(standortId));
+        }
+
+        function getVisibleCeoEmployeeFilterCheckboxes() {
+            return Array.from(document.querySelectorAll('.ceo-employee-filter-item:not(.hidden) .ceo-employee-filter-cb'));
+        }
+
+        function areAllVisibleCeoEmployeesSelected() {
+            const visible = getVisibleCeoEmployeeFilterCheckboxes();
+            return visible.length > 0 && visible.every((cb) => cb.checked);
+        }
+
+        function getCeoEmployeeFilterStandortToggleLabel(standortId, standortLabel, deselect) {
+            if (standortId === 'none') {
+                return deselect ? ceoEmployeeFilterDeselectStandortNone : ceoEmployeeFilterSelectStandortNone;
+            }
+            const template = deselect ? ceoEmployeeFilterDeselectStandortAll : ceoEmployeeFilterSelectStandortAll;
+            return template.replace('{location}', standortLabel);
+        }
+
+        function updateCeoEmployeeFilterStandortUi() {
+            const standortId = getCeoEmployeeFilterStandortId();
+            const wrap = document.getElementById('ceo-employee-filter-select-standort-wrap');
+            const selectBtn = document.getElementById('ceo-employee-filter-select-standort-btn');
+            const tooltipLabel = document.getElementById('ceo-employee-filter-select-standort-tooltip');
+            if (!standortId) {
+                wrap?.classList.add('hidden');
+                if (selectBtn) {
+                    selectBtn.setAttribute('aria-label', '');
+                    selectBtn.setAttribute('aria-pressed', 'false');
+                }
+            } else {
+                const label = getCeoEmployeeFilterStandortLabel();
+                const allSelected = areAllVisibleCeoEmployeesSelected();
+                const text = getCeoEmployeeFilterStandortToggleLabel(standortId, label, allSelected);
+                if (tooltipLabel) tooltipLabel.textContent = text;
+                if (selectBtn) {
+                    selectBtn.setAttribute('aria-label', text);
+                    selectBtn.setAttribute('aria-pressed', allSelected ? 'true' : 'false');
+                }
+                wrap?.classList.remove('hidden');
+            }
+            updateCeoEmployeeFilterSummary();
+        }
+
         function filterCeoEmployeeFilterList() {
             const q = (document.getElementById('ceo-employee-filter-search')?.value ?? '').trim().toLowerCase();
             const terms = q ? q.split(/\s+/).filter(Boolean) : [];
+            const standortId = getCeoEmployeeFilterStandortId();
             document.querySelectorAll('.ceo-employee-filter-item').forEach((item) => {
                 const name = item.dataset.employeeName || '';
-                const visible = terms.length === 0 || terms.every((term) => name.includes(term));
-                item.classList.toggle('hidden', !visible);
+                const nameMatch = terms.length === 0 || terms.every((term) => name.includes(term));
+                const standortMatch = ceoEmployeeFilterItemMatchesStandort(item, standortId);
+                item.classList.toggle('hidden', !(nameMatch && standortMatch));
             });
+            updateCeoEmployeeFilterStandortUi();
+        }
+
+        function selectAllCeoEmployeesAtStandort() {
+            const standortId = getCeoEmployeeFilterStandortId();
+            if (!standortId) return;
+            const visibleCbs = getVisibleCeoEmployeeFilterCheckboxes();
+            if (visibleCbs.length === 0) return;
+            const allSelected = visibleCbs.every((cb) => cb.checked);
+            visibleCbs.forEach((cb) => {
+                cb.checked = !allSelected;
+            });
+            saveCeoEmployeeFilterSelection();
+            applyCeoEmployeeFilter();
         }
 
         function syncCeoVacationEmployeeDropdown() {
-            const select = document.getElementById('admin-vacation-user');
-            if (!select) return;
-            const selected = getCeoEmployeeFilterSelectedIds();
-            let firstVisible = '';
-            Array.from(select.options).forEach((opt) => {
-                if (!opt.value) return;
-                const show = !selected || selected.has(String(opt.value));
-                opt.hidden = !show;
-                opt.disabled = !show;
-                if (show && !firstVisible) firstVisible = opt.value;
+            syncAdminVacationEmployeePicker();
+        }
+
+        function isAdminVacationEmployeeInPool(employeeId) {
+            return isCeoUserVisible(employeeId);
+        }
+
+        function getAdminVacationEmployeePickerStandortId() {
+            return document.getElementById('admin-vacation-employee-picker-standort')?.value ?? '';
+        }
+
+        function filterAdminVacationEmployeePickerList() {
+            const q = (document.getElementById('admin-vacation-employee-picker-search')?.value ?? '').trim().toLowerCase();
+            const terms = q ? q.split(/\s+/).filter(Boolean) : [];
+            const standortId = getAdminVacationEmployeePickerStandortId();
+            let visibleCount = 0;
+
+            document.querySelectorAll('.admin-vacation-employee-picker-item').forEach((item) => {
+                const employeeId = item.dataset.employeeId || '';
+                const name = item.dataset.employeeName || '';
+                const inPool = isAdminVacationEmployeeInPool(employeeId);
+                const nameMatch = terms.length === 0 || terms.every((term) => name.includes(term));
+                const standortMatch = ceoEmployeeFilterItemMatchesStandort(item, standortId);
+                const show = inPool && nameMatch && standortMatch;
+                item.classList.toggle('hidden', !show);
+                if (show) visibleCount++;
             });
-            if (select.value && select.options[select.selectedIndex]?.disabled) {
-                select.value = firstVisible;
-            } else if (selected && selected.size === 1) {
-                select.value = Array.from(selected)[0];
+
+            const emptyEl = document.getElementById('admin-vacation-employee-picker-empty');
+            const listEl = document.getElementById('admin-vacation-employee-picker-list');
+            if (emptyEl) emptyEl.classList.toggle('hidden', visibleCount > 0);
+            if (listEl) listEl.classList.toggle('hidden', visibleCount === 0);
+        }
+
+        function updateAdminVacationEmployeePickerSummary() {
+            const hidden = document.getElementById('admin-vacation-user');
+            const summary = document.getElementById('admin-vacation-employee-picker-summary');
+            if (!hidden || !summary) return;
+
+            const value = hidden.value || '';
+            if (!value) {
+                summary.textContent = ceoSelectEmployeePh;
+                summary.classList.remove('has-value');
+                summary.removeAttribute('title');
+                return;
             }
+
+            const selectedItem = document.querySelector('.admin-vacation-employee-picker-item[data-employee-id="' + value + '"]');
+            const label = selectedItem?.dataset.employeeDisplayName || summary.textContent || ceoSelectEmployeePh;
+            summary.textContent = label;
+            summary.classList.add('has-value');
+            summary.setAttribute('title', label);
+        }
+
+        function syncAdminVacationEmployeePickerSelectionUi() {
+            const hidden = document.getElementById('admin-vacation-user');
+            if (!hidden) return;
+            const value = hidden.value || '';
+            document.querySelectorAll('.admin-vacation-employee-picker-item').forEach((item) => {
+                item.classList.toggle('is-selected', value !== '' && item.dataset.employeeId === value);
+                item.setAttribute('aria-selected', item.classList.contains('is-selected') ? 'true' : 'false');
+            });
+            updateAdminVacationEmployeePickerSummary();
+        }
+
+        function setAdminVacationEmployeePickerOpen(open) {
+            const toggle = document.getElementById('admin-vacation-employee-picker-toggle');
+            const dropdown = document.getElementById('admin-vacation-employee-picker-dropdown');
+            if (!toggle || !dropdown) return;
+
+            toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+            dropdown.classList.toggle('hidden', !open);
+
+            if (open) {
+                positionAdminVacationEmployeePickerDropdown();
+                filterAdminVacationEmployeePickerList();
+                document.getElementById('admin-vacation-employee-picker-search')?.focus();
+            } else {
+                dropdown.style.removeProperty('position');
+                dropdown.style.removeProperty('top');
+                dropdown.style.removeProperty('left');
+                dropdown.style.removeProperty('width');
+                dropdown.style.removeProperty('max-height');
+            }
+        }
+
+        function positionAdminVacationEmployeePickerDropdown() {
+            const toggle = document.getElementById('admin-vacation-employee-picker-toggle');
+            const dropdown = document.getElementById('admin-vacation-employee-picker-dropdown');
+            if (!toggle || !dropdown || dropdown.classList.contains('hidden')) return;
+
+            const rect = toggle.getBoundingClientRect();
+            const margin = 8;
+            dropdown.style.position = 'fixed';
+            dropdown.style.left = rect.left + 'px';
+            dropdown.style.width = rect.width + 'px';
+            dropdown.style.removeProperty('max-height');
+            dropdown.style.removeProperty('overflow-y');
+
+            dropdown.classList.remove('hidden');
+            const dropdownHeight = dropdown.offsetHeight;
+            let top = rect.bottom + margin;
+            if (top + dropdownHeight > window.innerHeight - margin) {
+                top = Math.max(margin, rect.top - margin - dropdownHeight);
+            }
+            dropdown.style.top = top + 'px';
+        }
+
+        function setAdminVacationEmployeePickerValue(userId, displayName) {
+            const hidden = document.getElementById('admin-vacation-user');
+            if (!hidden) return;
+
+            const nextValue = userId ? String(userId) : '';
+            const changed = hidden.value !== nextValue;
+            hidden.value = nextValue;
+            syncAdminVacationEmployeePickerSelectionUi();
+
+            if (changed) {
+                hidden.dispatchEvent(new Event('change', { bubbles: true }));
+            } else if (displayName) {
+                updateAdminVacationEmployeePickerSummary();
+            }
+        }
+
+        function syncAdminVacationEmployeePicker() {
+            const hidden = document.getElementById('admin-vacation-user');
+            if (!hidden) return;
+
+            filterAdminVacationEmployeePickerList();
+
+            const currentValue = hidden.value || '';
+            if (currentValue && !isAdminVacationEmployeeInPool(currentValue)) {
+                setAdminVacationEmployeePickerValue('', '');
+            }
+
+            const selected = getCeoEmployeeFilterSelectedIds();
+            if (selected && selected.size === 1) {
+                const onlyId = Array.from(selected)[0];
+                const item = document.querySelector('.admin-vacation-employee-picker-item[data-employee-id="' + onlyId + '"]');
+                if (item) {
+                    setAdminVacationEmployeePickerValue(onlyId, item.dataset.employeeDisplayName || '');
+                }
+            }
+
+            syncAdminVacationEmployeePickerSelectionUi();
+        }
+
+        function resetAdminVacationEmployeePickerFilters() {
+            const search = document.getElementById('admin-vacation-employee-picker-search');
+            const standort = document.getElementById('admin-vacation-employee-picker-standort');
+            if (search) search.value = '';
+            if (standort) standort.value = '';
+            filterAdminVacationEmployeePickerList();
+        }
+
+        function clearAdminVacationEmployeePickerSelection() {
+            setAdminVacationEmployeePickerValue('', '');
+            setAdminVacationEmployeePickerOpen(false);
+            updateAdminVacationValidation();
+        }
+
+        function initAdminVacationEmployeePicker() {
+            const root = document.getElementById('admin-vacation-employee-picker');
+            if (!root || root.dataset.etPickerWired === '1') return;
+            root.dataset.etPickerWired = '1';
+
+            syncAdminVacationEmployeePicker();
+
+            document.getElementById('admin-vacation-employee-picker-toggle')?.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const dropdown = document.getElementById('admin-vacation-employee-picker-dropdown');
+                const open = dropdown?.classList.contains('hidden');
+                setAdminVacationEmployeePickerOpen(open);
+            });
+
+            document.getElementById('admin-vacation-employee-picker-reset-btn')?.addEventListener('click', function(e) {
+                e.stopPropagation();
+                resetAdminVacationEmployeePickerFilters();
+            });
+            document.getElementById('admin-vacation-employee-picker-clear-btn')?.addEventListener('click', function(e) {
+                e.stopPropagation();
+                clearAdminVacationEmployeePickerSelection();
+            });
+
+            document.getElementById('admin-vacation-employee-picker-search')?.addEventListener('input', filterAdminVacationEmployeePickerList);
+            document.getElementById('admin-vacation-employee-picker-search')?.addEventListener('search', filterAdminVacationEmployeePickerList);
+            document.getElementById('admin-vacation-employee-picker-standort')?.addEventListener('change', filterAdminVacationEmployeePickerList);
+
+            document.getElementById('admin-vacation-employee-picker-list')?.addEventListener('click', function(e) {
+                const item = e.target.closest('.admin-vacation-employee-picker-item');
+                if (!item || item.classList.contains('hidden')) return;
+                setAdminVacationEmployeePickerValue(item.dataset.employeeId || '', item.dataset.employeeDisplayName || '');
+                setAdminVacationEmployeePickerOpen(false);
+            });
+
+            const dropdown = document.getElementById('admin-vacation-employee-picker-dropdown');
+            dropdown?.addEventListener('click', function(e) {
+                e.stopPropagation();
+            });
+
+            if (!window.__etAdminVacationPickerDocClickWired) {
+                window.__etAdminVacationPickerDocClickWired = true;
+                document.addEventListener('click', function(e) {
+                    const pickerRoot = document.getElementById('admin-vacation-employee-picker');
+                    const panel = document.getElementById('admin-vacation-employee-picker-dropdown');
+                    if (!pickerRoot || !panel || panel.classList.contains('hidden')) return;
+                    if (!pickerRoot.contains(e.target)) {
+                        setAdminVacationEmployeePickerOpen(false);
+                    }
+                });
+            }
+
+            if (!window.__etAdminVacationPickerRepositionWired) {
+                window.__etAdminVacationPickerRepositionWired = true;
+                const reposition = function() {
+                    const panel = document.getElementById('admin-vacation-employee-picker-dropdown');
+                    if (panel && !panel.classList.contains('hidden')) {
+                        positionAdminVacationEmployeePickerDropdown();
+                    }
+                };
+                window.addEventListener('resize', reposition);
+                window.addEventListener('scroll', reposition, true);
+            }
+
+            window.addEventListener('easytime:ceo-employee-filter-changed', syncAdminVacationEmployeePicker);
         }
 
         function applyCeoEmployeeFilterToCalendar() {
@@ -2008,8 +2380,11 @@ if (!isset($currentRole)) exit;
             document.querySelectorAll('.ceo-employee-filter-cb').forEach((cb) => { cb.checked = false; });
             const search = document.getElementById('ceo-employee-filter-search');
             if (search) search.value = '';
+            const standort = document.getElementById('ceo-employee-filter-standort');
+            if (standort) standort.value = '';
             saveCeoEmployeeFilterSelection();
             setCeoEmployeeFilterDropdownOpen(false);
+            filterCeoEmployeeFilterList();
             applyCeoEmployeeFilter();
         }
 
@@ -2019,6 +2394,7 @@ if (!isset($currentRole)) exit;
 
             loadCeoEmployeeFilterSelection();
             loadCeoEmployeeFilterPinState();
+            filterCeoEmployeeFilterList();
             applyCeoEmployeeFilter();
 
             if (root.dataset.etFilterWired === '1') return;
@@ -2026,7 +2402,10 @@ if (!isset($currentRole)) exit;
 
             if (!window.__etCeoFilterResizeWired) {
                 window.__etCeoFilterResizeWired = true;
-                window.addEventListener('resize', applyCeoEmployeeFilterPinLayout);
+                window.addEventListener('resize', function() {
+                    applyCeoEmployeeFilterPinLayout();
+                    updateCeoEmployeeFilterSummary();
+                });
             }
 
             document.getElementById('ceo-employee-filter-pin-btn')?.addEventListener('click', function(e) {
@@ -2043,6 +2422,13 @@ if (!isset($currentRole)) exit;
             });
             document.getElementById('ceo-employee-filter-search')?.addEventListener('input', filterCeoEmployeeFilterList);
             document.getElementById('ceo-employee-filter-search')?.addEventListener('search', filterCeoEmployeeFilterList);
+            document.getElementById('ceo-employee-filter-standort')?.addEventListener('change', function() {
+                filterCeoEmployeeFilterList();
+            });
+            document.getElementById('ceo-employee-filter-select-standort-btn')?.addEventListener('click', function(e) {
+                e.stopPropagation();
+                selectAllCeoEmployeesAtStandort();
+            });
 
             const dropdown = document.getElementById('ceo-employee-filter-dropdown');
             dropdown?.addEventListener('click', function(e) {
@@ -2134,20 +2520,35 @@ if (!isset($currentRole)) exit;
             if (days.some((ymd) => isYmdInOccupiedRange(ymd))) {
                 return { type: 'occupied', message: empOccupiedWarning };
             }
-            if (employeeVacationRemaining <= 0) {
-                return { type: 'no_balance', message: empNoBalanceZero };
-            }
-            if (days.length > employeeVacationRemaining) {
-                return { type: 'no_balance', message: empNoBalanceExceeded };
-            }
             return null;
+        }
+
+        let employeeCoverageFetchSeq = 0;
+
+        function fetchEmployeeCoverageCheck(startYmd, endInclusiveYmd, ignoreRequestId = null) {
+            if (!startYmd || !endInclusiveYmd || compareYmd(startYmd, endInclusiveYmd) > 0) {
+                return Promise.resolve({ blocked: false, messages: [] });
+            }
+            const seq = ++employeeCoverageFetchSeq;
+            const params = new URLSearchParams({
+                action: 'coverage_check',
+                start: startYmd,
+                end: endInclusiveYmd
+            });
+            if (ignoreRequestId) {
+                params.set('ignore_request_id', String(ignoreRequestId));
+            }
+            return fetch('/?' + params.toString(), { headers: { 'Accept': 'application/json' } })
+                .then((res) => res.json())
+                .then((data) => (seq === employeeCoverageFetchSeq ? data : null))
+                .catch(() => ({ blocked: false, messages: [] }));
         }
 
         function shouldMarkEmployeeDayUnbookable(ymd, startYmd, endExclusiveYmd, issue) {
             if (isYmdBeforeToday(ymd) || isYmdBlocked(ymd) || isYmdInOccupiedRange(ymd)) {
                 return true;
             }
-            return !!(issue && issue.type === 'no_balance');
+            return false;
         }
 
         function rangesOverlapExclusive(startA, endExclusiveA, startB, endExclusiveB) {
@@ -2199,15 +2600,80 @@ if (!isset($currentRole)) exit;
             return null;
         }
 
+        let adminCoverageFetchSeq = 0;
+
+        function escapeCoverageText(text) {
+            return String(text ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+        }
+
+        function setCalendarCoverageWarnings(warnings) {
+            const box = document.getElementById('calendar-info-warnings');
+            const list = document.getElementById('calendar-info-warnings-list');
+            if (!box || !list) return;
+            const items = Array.isArray(warnings) ? warnings.filter(Boolean) : [];
+            if (items.length === 0) {
+                box.classList.add('hidden');
+                list.innerHTML = '';
+                return;
+            }
+            list.innerHTML = items.map((w) => '<li>' + escapeCoverageText(w) + '</li>').join('');
+            box.classList.remove('hidden');
+        }
+
+        function fetchCoverageWarnings(userId, startYmd, endInclusiveYmd, ignoreRequestId = null) {
+            if (!userId || !startYmd || !endInclusiveYmd || compareYmd(startYmd, endInclusiveYmd) > 0) {
+                return Promise.resolve([]);
+            }
+            const seq = ++adminCoverageFetchSeq;
+            const params = new URLSearchParams({
+                action: 'coverage_warnings',
+                user_id: String(userId),
+                start: startYmd,
+                end: endInclusiveYmd
+            });
+            if (ignoreRequestId) {
+                params.set('ignore_request_id', String(ignoreRequestId));
+            }
+            return fetch('/?' + params.toString(), { headers: { 'Accept': 'application/json' } })
+                .then((res) => res.json())
+                .then((data) => (seq === adminCoverageFetchSeq ? (data.warnings || []) : null))
+                .catch(() => []);
+        }
+
+        function refreshAdminCoverageWarnings() {
+            const eventBody = document.getElementById('calendar-info-event-body');
+            if (eventBody && !eventBody.classList.contains('hidden')) {
+                return;
+            }
+            const userId = document.getElementById('admin-vacation-user')?.value || '';
+            const { start, end } = getAdminVacationRangeValues();
+            if (!userId || !start || !end || compareYmd(start, end) > 0) {
+                setCalendarCoverageWarnings([]);
+                return;
+            }
+            fetchCoverageWarnings(userId, start, end).then((warnings) => {
+                if (warnings !== null) {
+                    setCalendarCoverageWarnings(warnings);
+                }
+            });
+        }
+
         function updateAdminVacationValidation() {
             const form = document.getElementById('calendar-action-vacation-form');
             const submitBtn = document.getElementById('admin-vacation-submit-btn');
-            if (!form || !submitBtn || form.classList.contains('hidden')) return;
-
-            const issue = getAdminVacationValidationIssue();
-            submitBtn.disabled = !!issue;
-            submitBtn.classList.toggle('opacity-50', !!issue);
-            submitBtn.classList.toggle('cursor-not-allowed', !!issue);
+            if (form && submitBtn && !form.classList.contains('hidden')) {
+                const issue = getAdminVacationValidationIssue();
+                submitBtn.disabled = !!issue;
+                submitBtn.classList.toggle('opacity-50', !!issue);
+                submitBtn.classList.toggle('cursor-not-allowed', !!issue);
+            }
+            refreshAdminCoverageWarnings();
+            if (window.adminScheduleBooking?.reloadEditor) {
+                window.adminScheduleBooking.reloadEditor();
+            }
         }
 
         const calendarSelection = {
@@ -2217,6 +2683,65 @@ if (!isset($currentRole)) exit;
         const crossMonthDragByCalendarId = {};
         
         document.addEventListener('DOMContentLoaded', function() {
+            function getCalendarColumnForPanel(panel) {
+                const grid = panel.closest('.grid');
+                if (!grid) return null;
+                const col = grid.querySelector(':scope > .xl\\:col-span-2');
+                if (!col) return null;
+                if (col.classList.contains('rounded-3xl')) {
+                    return col;
+                }
+                return col.querySelector(':scope > .rounded-3xl');
+            }
+
+            function syncCalendarSidePanelHeight(panel) {
+                const scrollEl = panel.querySelector('.calendar-side-panel-scroll');
+                const colEl = getCalendarColumnForPanel(panel);
+                if (!scrollEl || !colEl) return;
+                const desktop = window.matchMedia('(min-width: 1280px)').matches;
+                if (!desktop) {
+                    scrollEl.style.maxHeight = '';
+                    scrollEl.classList.remove('is-scrollable');
+                    return;
+                }
+                scrollEl.style.maxHeight = Math.round(colEl.getBoundingClientRect().height) + 'px';
+                requestAnimationFrame(function () {
+                    const scrollable = scrollEl.scrollHeight > scrollEl.clientHeight + 1;
+                    scrollEl.classList.toggle('is-scrollable', scrollable);
+                });
+            }
+
+            function setupCalendarSidePanelHeightSync() {
+                const panels = document.querySelectorAll('.calendar-side-panel');
+                if (!panels.length) return;
+
+                panels.forEach((panel) => {
+                    const colEl = getCalendarColumnForPanel(panel);
+                    const scrollEl = panel.querySelector('.calendar-side-panel-scroll');
+                    if (!colEl) return;
+                    syncCalendarSidePanelHeight(panel);
+                    if (typeof ResizeObserver !== 'undefined') {
+                        const observer = new ResizeObserver(() => syncCalendarSidePanelHeight(panel));
+                        observer.observe(colEl);
+                        if (scrollEl) observer.observe(scrollEl);
+                    }
+                });
+
+                window.syncCalendarSidePanelHeights = function syncCalendarSidePanelHeights() {
+                    panels.forEach(syncCalendarSidePanelHeight);
+                };
+
+                let resizeTimer;
+                window.addEventListener('resize', function () {
+                    clearTimeout(resizeTimer);
+                    resizeTimer = setTimeout(function () {
+                        panels.forEach(syncCalendarSidePanelHeight);
+                    }, 100);
+                });
+            }
+
+            setupCalendarSidePanelHeightSync();
+
             function formatLocalDate(dateObj) {
                 const year = dateObj.getFullYear();
                 const month = String(dateObj.getMonth() + 1).padStart(2, '0');
@@ -2305,6 +2830,8 @@ if (!isset($currentRole)) exit;
                 }
                 document.getElementById('employee-calendar-range-hint')?.classList.remove('hidden');
                 document.getElementById('employee-calendar-range-inputs')?.classList.remove('hidden');
+                window.EasyTimeSchedule?.hideEventSchedule('employee-calendar-range-schedule-wrap', 'employee-calendar-range-schedule-body');
+                window.employeeScheduleBooking?.hide();
             }
 
             function updateEmployeeRangeHintVisibility() {
@@ -2338,6 +2865,7 @@ if (!isset($currentRole)) exit;
                 if (infoBody) infoBody.innerHTML = '';
                 document.getElementById('employee-calendar-info-empty')?.classList.remove('hidden');
                 document.getElementById('employee-calendar-info-content')?.classList.add('hidden');
+                window.EasyTimeSchedule?.hideEventSchedule('employee-calendar-range-schedule-wrap', 'employee-calendar-range-schedule-body');
                 document.getElementById('employee-calendar-action-empty')?.classList.remove('hidden');
                 document.getElementById('employee-calendar-action-range')?.classList.add('hidden');
                 document.getElementById('employee-calendar-action-event')?.classList.add('hidden');
@@ -2366,15 +2894,42 @@ if (!isset($currentRole)) exit;
                 const days = eachDayInRangeExclusive(startYmd, endExclusiveYmd).length;
 
                 showEmployeeRangeSection(startYmd, endInclusive);
+                window.__employeeVacationForm?.setCoverageState(false, []);
 
-                renderEmployeeInfoPanel({
-                    eyebrow: issue ? '' : '<?= I18n::get('emp.days_deduct') ?>',
-                    statusLabel: issue ? empUnbookableInfo : '',
-                    statusClass: issue ? 'bg-red-100 text-red-800 border-red-200' : '',
-                    days: issue ? null : days,
-                    note: issue ? issue.message : '',
-                    isWarning: !!issue
-                });
+                if (issue) {
+                    renderEmployeeInfoPanel({
+                        eyebrow: issue ? '' : '<?= I18n::get('emp.days_deduct') ?>',
+                        statusLabel: issue ? empUnbookableInfo : '',
+                        statusClass: issue ? 'bg-red-100 text-red-800 border-red-200' : '',
+                        days: issue ? null : days,
+                        note: issue ? issue.message : '',
+                        isWarning: !!issue
+                    });
+                } else {
+                    renderEmployeeInfoPanel({
+                        eyebrow: '<?= I18n::get('emp.days_deduct') ?>',
+                        days: days
+                    });
+                    fetchEmployeeCoverageCheck(startYmd, endInclusive).then((data) => {
+                        if (!data) return;
+                        const sel = calendarSelection['employee-calendar'];
+                        if (sel.type !== 'range' || sel.start !== startYmd || sel.end !== endExclusiveYmd) return;
+                        if (getEmployeeSelectionIssue(startYmd, endExclusiveYmd)) return;
+
+                        window.__employeeVacationForm?.setCoverageState(!!data.blocked, data.messages || []);
+
+                        if (data.blocked && data.messages?.length) {
+                            renderEmployeeInfoPanel({
+                                eyebrow: '<?= I18n::get('emp.days_deduct') ?>',
+                                days: days,
+                                statusLabel: empCoverageBlockedLabel,
+                                statusClass: 'bg-red-100 text-red-800 border-red-200',
+                                noteItems: data.messages.slice(0, 4),
+                                isWarning: true
+                            });
+                        }
+                    });
+                }
 
                 applyEmployeeUnbookableDayMarkers(startYmd, endExclusiveYmd);
             }
@@ -2425,10 +2980,14 @@ if (!isset($currentRole)) exit;
             }
 
             function showEmployeeRangePanel(startYmd, endExclusiveYmd) {
+                window.EasyTimeSchedule?.hideEventSchedule('employee-calendar-range-schedule-wrap', 'employee-calendar-range-schedule-body');
+                const endInclusive = addDaysYmd(endExclusiveYmd, -1);
+                showEmployeeRangeSection(startYmd, endInclusive, { readonly: false });
                 document.getElementById('employee-calendar-action-empty')?.classList.add('hidden');
                 document.getElementById('employee-calendar-action-event')?.classList.add('hidden');
                 document.getElementById('employee-calendar-action-range')?.classList.remove('hidden');
                 updateEmployeeRangeSelectionUi(startYmd, endExclusiveYmd);
+                window.employeeScheduleBooking?.reloadEditor();
             }
 
             function employeeStatusBadgeClass(status) {
@@ -2457,6 +3016,7 @@ if (!isset($currentRole)) exit;
                     statusClass = '',
                     days = null,
                     note = '',
+                    noteItems = [],
                     isWarning = false
                 } = options;
 
@@ -2467,12 +3027,19 @@ if (!isset($currentRole)) exit;
                        </div>`
                     : '';
 
+                let noteHtml = '';
+                if (noteItems.length > 0) {
+                    noteHtml = `<ul class="text-sm leading-relaxed text-red-700 list-disc list-inside space-y-0.5">${noteItems.map((item) => `<li>${escapeCoverageText(item)}</li>`).join('')}</ul>`;
+                } else if (note) {
+                    noteHtml = `<p class="text-sm leading-relaxed ${isWarning ? 'text-red-700' : 'text-emerald-600'}">${note}</p>`;
+                }
+
                 body.innerHTML = `
                     ${eyebrow ? `<div class="text-xs font-bold uppercase tracking-[0.2em] text-emerald-500">${eyebrow}</div>` : ''}
                     ${range ? `<div class="text-2xl sm:text-[1.65rem] font-bold text-emerald-900 leading-tight tracking-tight">${range}</div>` : ''}
                     ${statusLabel ? `<span class="inline-flex px-3 py-1.5 rounded-full text-sm font-bold border ${statusClass}">${statusLabel}</span>` : ''}
                     ${daysHtml}
-                    ${note ? `<p class="text-sm leading-relaxed ${isWarning ? 'text-red-700' : 'text-emerald-600'}">${note}</p>` : ''}
+                    ${noteHtml}
                 `;
 
                 document.getElementById('employee-calendar-info-empty')?.classList.add('hidden');
@@ -2551,6 +3118,8 @@ if (!isset($currentRole)) exit;
                 if (eventActions) eventActions.innerHTML = '';
                 document.getElementById('calendar-info-empty')?.classList.remove('hidden');
                 document.getElementById('calendar-info-content')?.classList.add('hidden');
+                window.EasyTimeSchedule?.hideEventSchedule('calendar-range-schedule-wrap', 'calendar-range-schedule-body');
+                window.adminScheduleBooking?.hide();
 
                 document.getElementById('calendar-action-empty')?.classList.remove('hidden');
                 document.getElementById('calendar-action-range-wrapper')?.classList.add('hidden');
@@ -3020,6 +3589,7 @@ if (!isset($currentRole)) exit;
                 syncAdminRangeToForms();
                 updateAdminRangeHintVisibility();
                 document.getElementById('calendar-info-event-body')?.classList.add('hidden');
+                window.EasyTimeSchedule?.hideEventSchedule('calendar-range-schedule-wrap', 'calendar-range-schedule-body');
                 if (hasBlockedOverlap(start, endExclusive)) {
                     showActionUnblockSelection(start, endExclusive);
                     setCalendarInfo('Zeitraum', start, end, buildAdminInfoMeta(start, end, 'Aktion: Sperrbereich(e) aufheben.'));
@@ -3036,6 +3606,9 @@ if (!isset($currentRole)) exit;
             function clearCalendarActions() {
                 document.getElementById('calendar-info-content')?.classList.add('hidden');
                 document.getElementById('calendar-info-empty')?.classList.remove('hidden');
+                setCalendarCoverageWarnings([]);
+                window.EasyTimeSchedule?.hideEventSchedule('calendar-range-schedule-wrap', 'calendar-range-schedule-body');
+                window.adminScheduleBooking?.hide();
                 document.getElementById('calendar-action-empty')?.classList.remove('hidden');
                 document.getElementById('calendar-action-block-form')?.classList.add('hidden');
                 document.getElementById('calendar-action-vacation-form')?.classList.add('hidden');
@@ -3162,6 +3735,7 @@ if (!isset($currentRole)) exit;
 
             function applyCeoSelection(range, syncCalendarSelection = true) {
                 if (!range || !range.start || !range.end) return;
+                window.EasyTimeSchedule?.hideEventSchedule('calendar-range-schedule-wrap', 'calendar-range-schedule-body');
                 ceoSelectedRange = { start: range.start, end: range.end };
                 ceoSelectionSetAt = Date.now();
                 persistCeoRange(ceoSelectedRange);
@@ -3186,6 +3760,7 @@ if (!isset($currentRole)) exit;
                 showAdminRangeActions();
                 document.getElementById('calendar-action-block-form')?.classList.remove('hidden');
                 document.getElementById('calendar-action-vacation-form')?.classList.add('hidden');
+                window.adminScheduleBooking?.hide();
                 updateCeoModeButtonStyles();
             }
 
@@ -3195,6 +3770,7 @@ if (!isset($currentRole)) exit;
                 document.getElementById('calendar-action-vacation-form')?.classList.remove('hidden');
                 updateCeoModeButtonStyles();
                 updateAdminVacationValidation();
+                window.adminScheduleBooking?.reloadEditor();
             }
 
             function getBlockedOverlaps(startStr, endExclusiveStr) {
@@ -3262,8 +3838,11 @@ if (!isset($currentRole)) exit;
                     eyebrow: 'Antrag #' + request.id,
                     statusLabel: employeeStatusLabel(request.status),
                     statusClass: employeeStatusBadgeClass(request.status),
-                    days: request.net_days
+                    days: request.net_days,
+                    note: (request.stunden_display ? '<?= I18n::get('schedule.total_hours') ?>: ' + request.stunden_display + ' h' : '') + (request.ist_ganztag !== false ? ' · <?= I18n::get('schedule.full_day') ?>' : '')
                 });
+                window.EasyTimeSchedule?.showEventSchedule('employee-calendar-range-schedule-wrap', 'employee-calendar-range-schedule-body', request);
+                window.employeeScheduleBooking?.hide();
 
                 const employeeDatesWarning = buildEmployeeDatesWarningHtml(empDatesChangedPanelMsg);
 
@@ -3297,6 +3876,7 @@ if (!isset($currentRole)) exit;
                                             <input type="date" name="new_end_date" value="${request.end_date}" required class="w-full bg-[#fffdf2] border border-lime-200 rounded-xl px-4 py-3 text-sm text-emerald-900 outline-none focus:ring-2 focus:ring-lime-400">
                                         </div>
                                     </div>
+                                    ${window.EasyTimeSchedule?.buildFormScheduleMountHtml(request) || ''}
                                     ${employeeDatesWarning}
                                     <button type="submit" class="w-full et-btn-primary font-bold py-3 rounded-xl"><?= I18n::get('emp.request_change') ?></button>
                                 </form>`
@@ -3338,6 +3918,7 @@ if (!isset($currentRole)) exit;
                 actions.innerHTML = actionsHtml;
                 wireActionPicker(actions);
                 wireDatesChangeForms(actions);
+                window.EasyTimeSchedule?.wireFormSchedules(actions);
 
                 document.getElementById('employee-calendar-action-empty')?.classList.add('hidden');
                 document.getElementById('employee-calendar-action-range')?.classList.add('hidden');
@@ -3359,6 +3940,53 @@ if (!isset($currentRole)) exit;
                     document.getElementById('employee-calendar')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }, 80);
             };
+
+            function escapeHtml(text) {
+                return String(text ?? '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;');
+            }
+
+            function formatEmployeeStandorteText(standorte) {
+                if (!standorte || standorte.length === 0) {
+                    return ceoStandorteEmpty;
+                }
+                return standorte.map((standort) => {
+                    let label = standort.ort || '';
+                    if (standort.basis) {
+                        label += ' (' + ceoStandortPrimaryShort + ')';
+                    }
+                    return label;
+                }).join(', ');
+            }
+
+            function formatEmployeeAbteilungenText(abteilungen) {
+                if (!abteilungen || abteilungen.length === 0) {
+                    return ceoAbteilungenEmpty;
+                }
+                return abteilungen.map((item) => item.name || '').filter(Boolean).join(', ');
+            }
+
+            function formatEmployeeLicenseClassesText(classes) {
+                if (!classes || classes.length === 0) {
+                    return ceoLicenseClassesEmpty;
+                }
+                return classes.map((item) => item.name || '').filter(Boolean).join(', ');
+            }
+
+            function buildCeoEmployeePersonInfoHtml(userId) {
+                const employee = employeeLookup[String(userId)];
+                if (!employee) return '';
+                return `
+                    <div class="pt-2 mt-2 border-t border-lime-200/80 space-y-1.5">
+                        <div><span class="font-semibold">${ceoAbteilungenLabel}:</span> ${escapeHtml(formatEmployeeAbteilungenText(employee.abteilungen))}</div>
+                        <div><span class="font-semibold">${ceoStandorteLabel}:</span> ${escapeHtml(formatEmployeeStandorteText(employee.standorte))}</div>
+                        <div><span class="font-semibold">${ceoLicenseClassesLabel}:</span> ${escapeHtml(formatEmployeeLicenseClassesText(employee.license_classes))}</div>
+                    </div>
+                `;
+            }
 
             window.showActionEventDetails = function showActionEventDetails(requestId) {
                 setCalendarEventSelection('ceo-calendar', requestId, null);
@@ -3448,6 +4076,7 @@ if (!isset($currentRole)) exit;
                                     data-warning-msg="${ceoDatesChangedPanelMsg.replace(/"/g, '&quot;')}">
                                     <input type="hidden" name="request_id" value="${request.id}">
                                     ${dateFields(request.start_date, request.end_date, 'start_date', 'end_date')}
+                                    ${window.EasyTimeSchedule?.buildFormScheduleMountHtml(request) || ''}
                                     ${datesWarningPending}
                                     ${commentField}
                                     <button type="submit" class="w-full et-btn-primary font-bold py-3 rounded-xl">${modifyLabel}</button>
@@ -3470,17 +4099,30 @@ if (!isset($currentRole)) exit;
                 actions.innerHTML = actionsHtml;
                 wireActionPicker(actions);
                 wireDatesChangeForms(actions);
+                window.EasyTimeSchedule?.wireFormSchedules(actions);
 
                 setAdminRangeDates(request.start_date, addDaysYmd(request.end_date, 1), { readonly: true });
 
+                const hoursLabel = <?= json_encode(I18n::get('schedule.total_hours'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+                const fullDayLabel = <?= json_encode(I18n::get('schedule.full_day'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+                const absenceHours = request.stunden_display || window.EasyTimeSchedule?.formatHours(request.minuten_abwesend || 0) || '';
+                const fullDayBadge = request.ist_ganztag !== false
+                    ? `<span class="inline-flex mt-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-lime-100 text-emerald-800 border border-lime-200">${escapeHtml(fullDayLabel)}</span>`
+                    : '';
+
                 eventInfo.innerHTML = `
-                    <div class="font-bold text-base mb-2">${request.firstname} ${request.lastname}</div>
-                    <div><span class="font-semibold">Status:</span> ${employeeStatusLabel(request.status)}</div>
-                    <div><span class="font-semibold">Tage:</span> ${request.net_days}</div>
-                    ${request.status === 'change_requested' && request.wunsch_start_date ? `<div><span class="font-semibold"><?= I18n::get('ceo.proposed_dates') ?>:</span> ${request.wunsch_start_date} – ${request.wunsch_end_date} (${request.wunsch_net_days || ''} Tage)</div>` : ''}
-                    <div><span class="font-semibold">Kontakt:</span> ${request.email}</div>
+                    <div class="font-bold text-base mb-2">${escapeHtml(request.firstname + ' ' + request.lastname)}</div>
+                    <div><span class="font-semibold">Status:</span> ${escapeHtml(employeeStatusLabel(request.status))}</div>
+                    <div><span class="font-semibold">${escapeHtml(hoursLabel)}:</span> ${escapeHtml(absenceHours)} h · ${escapeHtml(String(request.net_days ?? ''))} <?= I18n::get('emp.days') ?></div>
+                    ${fullDayBadge}
+                    ${request.status === 'change_requested' && request.wunsch_start_date ? `<div class="mt-1"><span class="font-semibold"><?= I18n::get('ceo.proposed_dates') ?>:</span> ${escapeHtml(request.wunsch_start_date + ' – ' + request.wunsch_end_date + ' (' + (request.wunsch_net_days || '') + ' Tage)')}</div>` : ''}
+                    <div><span class="font-semibold">Kontakt:</span> ${escapeHtml(request.email || '')}</div>
+                    ${buildCeoEmployeePersonInfoHtml(request.user_id)}
                 `;
                 eventInfo.classList.remove('hidden');
+                window.EasyTimeSchedule?.showEventSchedule('calendar-range-schedule-wrap', 'calendar-range-schedule-body', request);
+                window.adminScheduleBooking?.hide();
+                setCalendarCoverageWarnings(request.coverage_warnings || []);
                 setCalendarInfo('Termin', request.start_date, request.end_date, `Antrag #${request.id}`);
                 document.getElementById('calendar-action-empty')?.classList.add('hidden');
                 document.getElementById('calendar-action-range-wrapper')?.classList.add('hidden');
@@ -3572,6 +4214,7 @@ if (!isset($currentRole)) exit;
                     },
                     datesSet: function() {
                         reapplySelectionVisuals(elemId);
+                        window.syncCalendarSidePanelHeights?.();
                         const drag = crossMonthDragByCalendarId[elemId];
                         if (drag && drag.active && drag.lastPointerEvent) {
                             drag.continueAfterMonthChange(drag.lastPointerEvent);
@@ -3635,8 +4278,12 @@ if (!isset($currentRole)) exit;
                     });
                     applyCancelledVacationVisibility('employee-calendar');
                 }
-                document.getElementById('employee-start-date')?.addEventListener('change', applyEmployeeRangeFromInputs);
-                document.getElementById('employee-end-date')?.addEventListener('change', applyEmployeeRangeFromInputs);
+                const onEmployeeRangeInputChange = function() {
+                    applyEmployeeRangeFromInputs();
+                    window.employeeScheduleBooking?.reloadEditor();
+                };
+                document.getElementById('employee-start-date')?.addEventListener('change', onEmployeeRangeInputChange);
+                document.getElementById('employee-end-date')?.addEventListener('change', onEmployeeRangeInputChange);
                 updateEmployeeRangeHintVisibility();
             }
             if (document.getElementById('ceo-calendar')) {
@@ -3651,9 +4298,17 @@ if (!isset($currentRole)) exit;
                     applyCancelledVacationVisibility('ceo-calendar');
                 }
             }
+            window.requestAnimationFrame(function () {
+                window.syncCalendarSidePanelHeights?.();
+            });
+            setTimeout(function () {
+                window.syncCalendarSidePanelHeights?.();
+            }, 200);
+
             if (document.getElementById('ceo-employee-filter')) {
                 initCeoEmployeeFilter();
             }
+            initAdminVacationEmployeePicker();
             wireDatesChangeForms();
 
             document.getElementById('action-mode-vacation-btn')?.addEventListener('click', function() {
@@ -3665,6 +4320,38 @@ if (!isset($currentRole)) exit;
             document.getElementById('admin-range-start-date')?.addEventListener('change', applyAdminRangeFromInputs);
             document.getElementById('admin-range-end-date')?.addEventListener('change', applyAdminRangeFromInputs);
             updateAdminRangeHintVisibility();
+
+            if (window.EasyTimeSchedule) {
+                if (document.getElementById('calendar-action-vacation-form')) {
+                    window.adminScheduleBooking = window.EasyTimeSchedule.bindBookingForm({
+                        formId: 'calendar-action-vacation-form',
+                        partialInputId: 'admin-partial-schedule',
+                        jsonInputId: 'admin-schedule-json',
+                        wrapId: 'admin-schedule-booking-wrap',
+                        editorContainerId: 'admin-schedule-editor',
+                        getUserId: () => document.getElementById('admin-vacation-user')?.value || '',
+                        getStart: () => document.getElementById('admin-range-start-date')?.value || document.getElementById('vacation-form-start-date')?.value || '',
+                        getEnd: () => document.getElementById('admin-range-end-date')?.value || document.getElementById('vacation-form-end-date')?.value || '',
+                    });
+                    if (ceoSelectedRange && ceoActionMode === 'vacation' && !hasBlockedOverlap(ceoSelectedRange.start, ceoSelectedRange.end)) {
+                        window.adminScheduleBooking.reloadEditor();
+                    }
+                }
+                if (document.getElementById('employee-request-form')) {
+                    window.employeeScheduleBooking = window.EasyTimeSchedule.bindBookingForm({
+                        formId: 'employee-request-form',
+                        partialInputId: 'employee-partial-schedule',
+                        jsonInputId: 'employee-schedule-json',
+                        wrapId: 'employee-schedule-booking-wrap',
+                        editorContainerId: 'employee-schedule-editor',
+                        getUserId: () => null,
+                        getStart: () => document.getElementById('employee-start-date')?.value || '',
+                        getEnd: () => document.getElementById('employee-end-date')?.value || '',
+                    });
+                }
+            }
+
+            window.EasyTimeSchedule?.wireFormSchedules(document);
 
             function adminRangeIsPast() {
                 const start = document.getElementById('admin-range-start-date')?.value;
@@ -3695,7 +4382,10 @@ if (!isset($currentRole)) exit;
                 }
             }
 
-            document.getElementById('admin-vacation-user')?.addEventListener('change', updateAdminVacationValidation);
+            document.getElementById('admin-vacation-user')?.addEventListener('change', function() {
+                updateAdminVacationValidation();
+                window.adminScheduleBooking?.reloadEditor();
+            });
             document.getElementById('calendar-action-vacation-form')?.addEventListener('submit', handleAdminActionFormSubmit);
             document.getElementById('calendar-action-block-form')?.addEventListener('submit', handleAdminActionFormSubmit);
 
@@ -3819,16 +4509,41 @@ if (!isset($currentRole)) exit;
                 start: '',
                 end: '',
                 netDays: 0,
+                coverageBlocked: false,
+                coverageMessages: [],
                 todayMin: todayYmd,
                 unbookableTitle: empUnbookableInfo,
+                init() {
+                    window.__employeeVacationForm = this;
+                },
+                setCoverageState(blocked, messages) {
+                    this.coverageBlocked = !!blocked;
+                    this.coverageMessages = Array.isArray(messages) ? messages : [];
+                },
+                checkCoverage() {
+                    if (!this.start || !this.end || compareYmd(this.start, this.end) > 0) {
+                        this.setCoverageState(false, []);
+                        return;
+                    }
+                    fetchEmployeeCoverageCheck(this.start, this.end).then((data) => {
+                        if (!data) return;
+                        if (this.start && this.end && compareYmd(this.start, this.end) <= 0) {
+                            this.setCoverageState(!!data.blocked, data.messages || []);
+                        }
+                    });
+                },
                 get hasInvalidSelection() {
                     if (!this.start || !this.end) return false;
-                    return getEmployeeSelectionIssue(this.start, addDaysYmd(this.end, 1)) !== null;
+                    return getEmployeeSelectionIssue(this.start, addDaysYmd(this.end, 1)) !== null || this.coverageBlocked;
                 },
                 get invalidSelectionMessage() {
                     if (!this.start || !this.end) return '';
                     const issue = getEmployeeSelectionIssue(this.start, addDaysYmd(this.end, 1));
-                    return issue ? issue.message : '';
+                    if (issue) return issue.message;
+                    if (this.coverageBlocked && this.coverageMessages.length) {
+                        return this.coverageMessages[0];
+                    }
+                    return '';
                 },
                 get invalidSelectionTitle() {
                     return this.unbookableTitle;
@@ -3845,6 +4560,8 @@ if (!isset($currentRole)) exit;
                             this.netDays = 0;
                         }
                     }
+                    window.employeeScheduleBooking?.reloadEditor();
+                    this.checkCoverage();
                 },
                 handleEmployeeRequestSubmit(e) {
                     if (this.netDays <= 0 || !this.start || !this.end) {
@@ -3856,6 +4573,13 @@ if (!isset($currentRole)) exit;
                         e.preventDefault();
                         if (window.showEasyTimeToastMessage) {
                             window.showEasyTimeToastMessage(issue.message, 'error', issue.type);
+                        }
+                        return;
+                    }
+                    if (this.coverageBlocked) {
+                        e.preventDefault();
+                        if (window.showEasyTimeToastMessage) {
+                            window.showEasyTimeToastMessage(empCoverageRequestDenied, 'error', 'coverage');
                         }
                     }
                 }

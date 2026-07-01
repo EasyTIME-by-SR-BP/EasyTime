@@ -1,4 +1,9 @@
 <?php
+$composerAutoload = __DIR__ . '/../vendor/autoload.php';
+if (is_file($composerAutoload)) {
+    require_once $composerAutoload;
+}
+
 spl_autoload_register(function ($class) {
     if (strpos($class, 'App\\') === 0) {
         $file = __DIR__ . '/../' . lcfirst(str_replace('\\', '/', $class)) . '.php';
@@ -9,7 +14,11 @@ spl_autoload_register(function ($class) {
 use App\Models\User;
 use App\Models\Request as VacationRequest;
 use App\Models\RequestComment;
-use App\Models\Department;
+use App\Models\Abteilung;
+use App\Models\Fuehrerscheinklasse;
+use App\Models\Standort;
+use App\Models\Mindestbesetzung;
+use App\Models\VacationSchedule;
 use App\Models\RequestEvent;
 use App\Services\NotificationService;
 use App\Services\Inbox;
@@ -36,12 +45,19 @@ if (isset($_GET['lang'])) {
 
 // --- Handle Non-Logged In Actions ---
 if (!isset($_SESSION['user_id'])) {
+    $requestUri = (string) ($_SERVER['REQUEST_URI'] ?? '/');
+    if ($requestUri !== '/' && $requestUri !== '') {
+        $_SESSION['login_redirect'] = $requestUri;
+    }
+
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($action === 'login') {
             $user = User::authenticate($_POST['login'], $_POST['password']);
             if ($user) {
                 $_SESSION['user_id'] = $user['id'];
-                header("Location: /");
+                $redirect = (string) ($_SESSION['login_redirect'] ?? '/');
+                unset($_SESSION['login_redirect']);
+                header('Location: ' . ($redirect !== '' ? $redirect : '/'));
             } else {
                 header("Location: /?error=login_failed");
             }
@@ -89,6 +105,76 @@ if (!$currentUser) {
 
 $currentRole = $currentUser['role'];
 $isAdmin = in_array($currentRole, ['CEO', 'Admin'], true);
+
+if ($action === 'coverage_warnings' && $isAdmin) {
+    header('Content-Type: application/json; charset=utf-8');
+    $userId = isset($_GET['user_id']) ? (int) $_GET['user_id'] : 0;
+    $start = trim((string) ($_GET['start'] ?? ''));
+    $end = trim((string) ($_GET['end'] ?? ''));
+    $ignoreRequestId = isset($_GET['ignore_request_id']) ? (int) $_GET['ignore_request_id'] : 0;
+    if ($userId <= 0 || $start === '' || $end === '' || $end < $start) {
+        echo json_encode(['warnings' => []], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    echo json_encode([
+        'warnings' => VacationRequest::getCoverageWarnings(
+            $userId,
+            $start,
+            $end,
+            $ignoreRequestId > 0 ? $ignoreRequestId : null
+        ),
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+if ($action === 'coverage_check') {
+    header('Content-Type: application/json; charset=utf-8');
+    $start = trim((string) ($_GET['start'] ?? ''));
+    $end = trim((string) ($_GET['end'] ?? ''));
+    $ignoreRequestId = isset($_GET['ignore_request_id']) ? (int) $_GET['ignore_request_id'] : 0;
+    $targetUserId = $isAdmin && isset($_GET['user_id'])
+        ? (int) $_GET['user_id']
+        : (int) $currentUser['id'];
+    if ($targetUserId <= 0 || $start === '' || $end === '' || $end < $start) {
+        echo json_encode(['blocked' => false, 'messages' => []], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    if (!$isAdmin && $targetUserId !== (int) $currentUser['id']) {
+        http_response_code(403);
+        echo json_encode(['blocked' => false, 'messages' => []], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    $ignore = $ignoreRequestId > 0 ? $ignoreRequestId : null;
+    $messages = VacationRequest::getCoverageBlockingMessages($targetUserId, $start, $end, $ignore);
+    echo json_encode([
+        'blocked' => $messages !== [],
+        'messages' => $messages,
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+if ($action === 'schedule_preview') {
+    header('Content-Type: application/json; charset=utf-8');
+    $start = trim((string) ($_GET['start'] ?? ''));
+    $end = trim((string) ($_GET['end'] ?? ''));
+    $targetUserId = $isAdmin && isset($_GET['user_id']) && (int) $_GET['user_id'] > 0
+        ? (int) $_GET['user_id']
+        : ($isAdmin ? 0 : (int) $currentUser['id']);
+    if ($start === '' || $end === '' || $end < $start) {
+        echo json_encode(['segments' => [], 'daily_minutes' => VacationSchedule::DEFAULT_DAY_MINUTES], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    if (!$isAdmin && $targetUserId !== (int) $currentUser['id']) {
+        http_response_code(403);
+        echo json_encode(['segments' => []], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    echo json_encode([
+        'segments' => VacationSchedule::buildDefaultSegments($targetUserId, $start, $end),
+        'daily_minutes' => VacationSchedule::getDailyWorkMinutes($targetUserId),
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'change_password') {
     $newPw = $_POST['password'] ?? '';
@@ -233,9 +319,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 header("Location: /?error=invalid_request");
                 exit;
             }
-            $created = VacationRequest::create($currentUser['id'], $start, $end);
+            $isFullDay = ($_POST['partial_schedule'] ?? '0') !== '1';
+            $rawSchedule = json_decode((string) ($_POST['schedule_json'] ?? '[]'), true);
+            [, $segments] = VacationRequest::resolveScheduleInput((int) $currentUser['id'], $start, $end, $isFullDay, $rawSchedule);
+            $created = VacationRequest::create((int) $currentUser['id'], $start, $end, 'vacation', 0, $isFullDay, $segments);
             if ($created === 'fenstertage_exceeded') {
                 header("Location: /?error=fenstertage_exceeded");
+                exit;
+            }
+            if ($created === 'coverage_request_denied') {
+                header("Location: /?error=coverage_request_denied");
                 exit;
             }
             if ($created === 'insufficient_balance') {
@@ -301,12 +394,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $start = $_POST['new_start_date'] ?? null;
         $end = $_POST['new_end_date'] ?? null;
         if ($rid > 0 && $start && $end && $end >= $start) {
-            $netDays = VacationRequest::calculateNetDays($start, $end);
+            $reqRow = VacationRequest::getById($rid);
+            $userId = (int) ($reqRow['user_id'] ?? $currentUser['id']);
+            $isFullDay = ($_POST['partial_schedule'] ?? '0') !== '1';
+            $rawSchedule = json_decode((string) ($_POST['schedule_json'] ?? '[]'), true);
+            [$isFullDay, $segments] = VacationRequest::resolveScheduleInput($userId, $start, $end, $isFullDay, $rawSchedule);
+            $netDays = $isFullDay
+                ? VacationRequest::calculateNetDays($start, $end)
+                : VacationSchedule::minutesToDayEquivalent(VacationSchedule::totalMinutes($segments), $userId);
             if ($netDays <= 0) {
                 header('Location: /?error=invalid_request');
                 exit;
             }
-            $result = VacationRequest::requestChange($rid, (int) $currentUser['id'], $start, $end, $netDays);
+            $result = VacationRequest::requestChange($rid, (int) $currentUser['id'], $start, $end, $netDays, $isFullDay, $segments);
             if ($result === 'blocked_period') {
                 header('Location: /?error=blocked_period');
                 exit;
@@ -321,6 +421,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             if ($result === 'fenstertage_exceeded') {
                 header('Location: /?error=fenstertage_exceeded');
+                exit;
+            }
+            if ($result === 'coverage_request_denied') {
+                header('Location: /?error=coverage_request_denied');
                 exit;
             }
             if ($result) {
@@ -362,7 +466,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $before = VacationRequest::getById($requestId);
             $startDate = ($start && $end) ? $start : null;
             $endDate = ($start && $end) ? $end : null;
-            $ok = VacationRequest::decideChange($requestId, $decision === 'approve', $startDate, $endDate);
+            $isFullDay = null;
+            $segments = null;
+            if ($decision === 'approve' && $before) {
+                $userId = (int) ($before['user_id'] ?? 0);
+                $apStart = $startDate ?: (string) ($before['wunsch_start_date'] ?? $before['start_date']);
+                $apEnd = $endDate ?: (string) ($before['wunsch_end_date'] ?? $before['end_date']);
+                $isFullDay = ($_POST['partial_schedule'] ?? '0') !== '1';
+                $rawSchedule = json_decode((string) ($_POST['schedule_json'] ?? '[]'), true);
+                [$isFullDay, $segments] = VacationRequest::resolveScheduleInput($userId, $apStart, $apEnd, $isFullDay, $rawSchedule);
+            }
+            $ok = VacationRequest::decideChange($requestId, $decision === 'approve', $startDate, $endDate, $isFullDay, $segments);
             if ($ok === 'insufficient_balance') {
                 header('Location: /?error=insufficient_balance');
                 exit;
@@ -396,7 +510,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($requestId > 0 && $start && $end && $end >= $start) {
             $before = VacationRequest::getById($requestId);
             $previousRange = $before ? ($before['start_date'] . ' – ' . $before['end_date']) : '';
-            $ok = VacationRequest::adminModifyVacation($requestId, $start, $end);
+            $userId = (int) ($before['user_id'] ?? 0);
+            $isFullDay = ($_POST['partial_schedule'] ?? '0') !== '1';
+            $rawSchedule = json_decode((string) ($_POST['schedule_json'] ?? '[]'), true);
+            [$isFullDay, $segments] = VacationRequest::resolveScheduleInput($userId, $start, $end, $isFullDay, $rawSchedule);
+            $ok = VacationRequest::adminModifyVacation($requestId, $start, $end, $isFullDay, $segments);
             if ($ok === 'insufficient_balance') {
                 header('Location: /?error=insufficient_balance');
                 exit;
@@ -427,7 +545,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $before = VacationRequest::getById((int) $requestId);
             $startDate = ($approvedStart && $approvedEnd) ? $approvedStart : null;
             $endDate = ($approvedStart && $approvedEnd) ? $approvedEnd : null;
-            $ok = VacationRequest::decide($requestId, $currentUser['id'], $status, $comment, $startDate, $endDate);
+            $isFullDay = null;
+            $segments = null;
+            if ((string) $status === 'approved' && $before) {
+                $userId = (int) ($before['user_id'] ?? 0);
+                $start = $startDate ?: (string) $before['start_date'];
+                $end = $endDate ?: (string) $before['end_date'];
+                $isFullDay = ($_POST['partial_schedule'] ?? '0') !== '1';
+                $rawSchedule = json_decode((string) ($_POST['schedule_json'] ?? '[]'), true);
+                [$isFullDay, $segments] = VacationRequest::resolveScheduleInput($userId, $start, $end, $isFullDay, $rawSchedule);
+            }
+            $ok = VacationRequest::decide($requestId, $currentUser['id'], $status, $comment, $startDate, $endDate, $isFullDay, $segments);
             if ($ok === 'insufficient_balance') {
                 header('Location: /?error=insufficient_balance');
                 exit;
@@ -471,8 +599,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_POST['mnr'],
             $_POST['password'],
             $_POST['role'] ?? 'Employee',
-            ($_POST['department_id'] ?? '') !== '' ? $_POST['department_id'] : null,
-            null,
+            $_POST['license_class_ids'] ?? [],
+            $_POST['abteilung_ids'] ?? [],
+            $_POST['standort_ids'] ?? [],
+            isset($_POST['primary_standort_id']) && $_POST['primary_standort_id'] !== '' ? (int) $_POST['primary_standort_id'] : null,
             isset($_POST['vacation_entitlement_days']) ? (int) $_POST['vacation_entitlement_days'] : 25,
             isset($_POST['overtime_hours']) ? (float) $_POST['overtime_hours'] : 0,
             !empty($_POST['must_change_password'])
@@ -494,8 +624,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_POST['mnr'],
             $_POST['password'] ?? null,
             $_POST['role'] ?? 'Employee',
-            ($_POST['department_id'] ?? '') !== '' ? $_POST['department_id'] : null,
-            null,
+            $_POST['license_class_ids'] ?? [],
+            $_POST['abteilung_ids'] ?? [],
+            $_POST['standort_ids'] ?? [],
+            isset($_POST['primary_standort_id']) && $_POST['primary_standort_id'] !== '' ? (int) $_POST['primary_standort_id'] : null,
             isset($_POST['vacation_entitlement_days']) ? (int) $_POST['vacation_entitlement_days'] : 25,
             isset($_POST['overtime_hours']) ? (float) $_POST['overtime_hours'] : 0
         );
@@ -557,7 +689,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 header('Location: /?tab=operations&error=invalid_request');
                 exit;
             }
-            $created = VacationRequest::createAdminVacation($userId, $currentUser['id'], $start, $end, null, $comment ?: null);
+            $isFullDay = ($_POST['partial_schedule'] ?? '0') !== '1';
+            $rawSchedule = json_decode((string) ($_POST['schedule_json'] ?? '[]'), true);
+            [, $segments] = VacationRequest::resolveScheduleInput($userId, $start, $end, $isFullDay, $rawSchedule);
+            $created = VacationRequest::createAdminVacation($userId, $currentUser['id'], $start, $end, null, $comment ?: null, $isFullDay, $segments);
             if ($created === 'insufficient_balance') {
                 header('Location: /?error=insufficient_balance');
                 exit;
@@ -619,6 +754,74 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $val = max(0, (int) ($_POST['max_fenstertage'] ?? 0));
         VacationRequest::setSetting('max_fenstertage', (string) $val);
         header("Location: /?tab=settings&success=action_success");
+        exit;
+    }
+
+    if ($action === 'update_coverage_rules' && $isAdmin) {
+        VacationRequest::setSetting('min_staff_available', (string) max(0, (int) ($_POST['min_staff_available'] ?? 0)));
+        VacationRequest::setSetting('max_fenstertage', (string) max(0, (int) ($_POST['max_fenstertage'] ?? 0)));
+        Mindestbesetzung::saveStandortRules(is_array($_POST['standort_coverage'] ?? null) ? $_POST['standort_coverage'] : []);
+        Mindestbesetzung::saveAbteilungRules(is_array($_POST['abteilung_coverage'] ?? null) ? $_POST['abteilung_coverage'] : []);
+        header('Location: /?tab=settings&success=action_success');
+        exit;
+    }
+
+    if ($action === 'create_license_class' && $isAdmin) {
+        $created = Fuehrerscheinklasse::create(trim((string) ($_POST['name'] ?? '')));
+        header('Location: /?tab=settings&' . ($created ? 'success=action_success' : 'error=settings_pool_failed'));
+        exit;
+    }
+
+    if ($action === 'delete_license_class' && $isAdmin) {
+        $classId = isset($_POST['class_id']) ? (int) $_POST['class_id'] : 0;
+        $ok = $classId > 0 && Fuehrerscheinklasse::delete($classId);
+        header('Location: /?tab=settings&' . ($ok ? 'success=action_success' : 'error=settings_pool_in_use'));
+        exit;
+    }
+
+    if ($action === 'create_abteilung' && $isAdmin) {
+        $created = Abteilung::create(trim((string) ($_POST['name'] ?? '')));
+        header('Location: /?tab=settings&' . ($created ? 'success=action_success' : 'error=settings_pool_failed'));
+        exit;
+    }
+
+    if ($action === 'delete_abteilung' && $isAdmin) {
+        $abteilungId = isset($_POST['abteilung_id']) ? (int) $_POST['abteilung_id'] : 0;
+        $ok = $abteilungId > 0 && Abteilung::delete($abteilungId);
+        header('Location: /?tab=settings&' . ($ok ? 'success=action_success' : 'error=settings_pool_in_use'));
+        exit;
+    }
+
+    if ($action === 'create_standort' && $isAdmin) {
+        $created = Standort::create(
+            trim((string) ($_POST['ort'] ?? '')),
+            ($_POST['kostenstelle'] ?? '') !== '' ? (int) $_POST['kostenstelle'] : null,
+            trim((string) ($_POST['strasse'] ?? '')),
+            trim((string) ($_POST['hausnummer'] ?? '')),
+            ($_POST['plz'] ?? '') !== '' ? (int) $_POST['plz'] : null
+        );
+        header('Location: /?tab=settings&' . ($created ? 'standort_view=detail&standort_id=' . (int) $created . '&success=action_success' : 'standort_view=create&error=settings_pool_failed'));
+        exit;
+    }
+
+    if ($action === 'update_standort' && $isAdmin) {
+        $standortId = isset($_POST['standort_id']) ? (int) $_POST['standort_id'] : 0;
+        $ok = $standortId > 0 && Standort::update(
+            $standortId,
+            trim((string) ($_POST['ort'] ?? '')),
+            ($_POST['kostenstelle'] ?? '') !== '' ? (int) $_POST['kostenstelle'] : null,
+            trim((string) ($_POST['strasse'] ?? '')),
+            trim((string) ($_POST['hausnummer'] ?? '')),
+            ($_POST['plz'] ?? '') !== '' ? (int) $_POST['plz'] : null
+        );
+        header('Location: /?tab=settings&standort_view=detail&standort_id=' . $standortId . '&' . ($ok ? 'success=action_success' : 'error=settings_pool_failed'));
+        exit;
+    }
+
+    if ($action === 'delete_standort' && $isAdmin) {
+        $standortId = isset($_POST['standort_id']) ? (int) $_POST['standort_id'] : 0;
+        $ok = $standortId > 0 && Standort::delete($standortId);
+        header('Location: /?tab=settings&' . ($ok ? 'success=action_success' : 'error=settings_pool_in_use'));
         exit;
     }
 
@@ -688,9 +891,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // Data fetching for Views
 if ($isAdmin) {
     $requests = VacationRequest::getAll();
+    foreach ($requests as &$requestRow) {
+        $requestRow['coverage_warnings'] = VacationRequest::getCoverageWarnings(
+            (int) ($requestRow['user_id'] ?? 0),
+            (string) ($requestRow['start_date'] ?? ''),
+            (string) ($requestRow['end_date'] ?? ''),
+            (int) ($requestRow['id'] ?? 0)
+        );
+    }
+    unset($requestRow);
     $blockedPeriods = VacationRequest::getBlockedPeriods();
     $employees = User::getAll(); // To show in the team dashboard
-    $departments = Department::getAll();
+    $licenseClassesPool = Fuehrerscheinklasse::getAll();
+    $abteilungenPool = Abteilung::getAll();
+    $standortePool = Standort::getAll();
+
+    $resolvedTab = $_GET['tab'] ?? ($isAdmin ? 'operations' : 'calendar');
+    $settingsStandortView = $resolvedTab === 'settings' ? (string) ($_GET['standort_view'] ?? '') : '';
+    $selectedSettingsStandort = null;
+    if ($settingsStandortView === 'detail') {
+        $settingsStandortId = isset($_GET['standort_id']) ? (int) $_GET['standort_id'] : 0;
+        if ($settingsStandortId > 0) {
+            $selectedSettingsStandort = Standort::getById($settingsStandortId);
+        }
+    }
 
     $selectedTeamUserId = isset($_GET['team_user']) ? (int) $_GET['team_user'] : 0;
     if ($selectedTeamUserId <= 0 && !empty($employees)) {
@@ -726,6 +950,8 @@ if ($isAdmin) {
     $blockedPeriods = VacationRequest::getBlockedPeriods();
 }
 
+$requests = VacationRequest::attachSchedules($requests);
+
 $notificationListAll = Inbox::getForUser((int) $currentUser['id'], 80);
 $notificationUnreadCount = Inbox::countUnread((int) $currentUser['id']);
 $activeTab = $_GET['tab'] ?? ($isAdmin ? 'operations' : 'calendar');
@@ -751,6 +977,9 @@ if ($isAdmin) {
 $selectedHistoryRequestId = ($activeTab === 'history' && isset($_GET['request_id']))
     ? (int) $_GET['request_id']
     : 0;
+$highlightNotificationId = ($activeTab === 'inbox' && isset($_GET['notification_id']))
+    ? (int) $_GET['notification_id']
+    : 0;
 if ($activeTab === 'inbox') {
     $allowedInboxFilters = $isAdmin
         ? ['all', 'unread', 'tasks', 'password', 'approval', 'info', 'done']
@@ -759,14 +988,26 @@ if ($activeTab === 'inbox') {
     if (!in_array($inboxFilter, $allowedInboxFilters, true)) {
         $inboxFilter = 'all';
     }
+    if ($highlightNotificationId > 0) {
+        foreach ($notificationListAll as $noteRow) {
+            if ((int) ($noteRow['id'] ?? 0) === $highlightNotificationId) {
+                $inboxFilter = 'all';
+                break;
+            }
+        }
+    }
     $inboxCounts = Inbox::computeCounts($notificationListAll);
 }
 $notificationList = ($activeTab === 'inbox')
     ? Inbox::filterList($notificationListAll, $inboxFilter)
     : $notificationListAll;
-$userVacationStats = VacationRequest::calculateUserVacationStats($currentUser['id']);
+$userVacationStats = $currentRole === 'Employee'
+    ? null
+    : VacationRequest::calculateUserVacationStats($currentUser['id']);
 $minStaffAvailable = (int) VacationRequest::getSetting('min_staff_available', '1');
 $maxFenstertage    = (int) VacationRequest::getSetting('max_fenstertage', '0');
+$standortCoverageRules = $isAdmin ? Mindestbesetzung::getStandortRules() : [];
+$abteilungCoverageRules = $isAdmin ? Mindestbesetzung::getAbteilungRules() : [];
 if ($isAdmin) {
     $y = (int) date('Y');
     AustrianHolidays::warmCache([$y, $y + 1]);

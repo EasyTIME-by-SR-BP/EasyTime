@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "php -S localhost:8000 -t public",
     "db:seed": "php scripts/seed-database.php",
+    "db:seed:deploy": "bash scripts/reset-demo-deploy.sh",
     "test": "echo \"Error: no test specified\" && exit 1",
     "release": "tsx scripts/release.ts",
     "release:main:full": "pnpm release main:full",

@@ -128,6 +128,25 @@ pnpm release:[branch]:[target]
 
 GitHub Secrets (im Repo hinterlegt): `SERVER_IP`, `SERVER_USER`, `SERVER_SSH_PORT`, `SSH_PRIVATE_KEY`, `DB_PASSWORD`, `MYSQL_ROOT_PASSWORD`
 
+Optional (leer lassen bis SMTP/Domain stehen — Deploy schreibt sichere Defaults in die Server-`.env`):
+
+| GitHub | Name | Beispiel |
+|--------|------|----------|
+| **Variables** | `APP_URL` | `https://easytime.firma.at` |
+| **Variables** | `MAIL_ENABLED` | `true` |
+| **Variables** | `MAIL_HOST` | `smtp.office365.com` |
+| **Variables** | `MAIL_PORT` | `587` |
+| **Variables** | `MAIL_FROM_ADDRESS` | `easytime@firma.at` |
+| **Variables** | `MAIL_FROM_NAME` | `EasyTime` |
+| **Variables** | `MAIL_ENCRYPTION` | `tls` |
+| **Variables** | `MAIL_SMTP_AUTH` | `true` |
+| **Variables** | `MAIL_NOTIFY_TASKS` | `true` |
+| **Variables** | `MAIL_NOTIFY_INFO` | `false` |
+| **Secrets** | `MAIL_USERNAME` | SMTP-Benutzer |
+| **Secrets** | `MAIL_PASSWORD` | SMTP-Passwort |
+
+Ohne diese Werte: `MAIL_ENABLED=false`, leere SMTP-Felder — Mail bleibt aus, nichts bricht.
+
 GitHub Actions verbindet sich per SSH mit dem Server; der Server aktualisiert den Code per `git fetch` (Deploy Key).
 
 ### Test-Zugänge (Produktion / MariaDB)

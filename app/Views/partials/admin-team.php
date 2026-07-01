@@ -2,7 +2,9 @@
 use App\Core\I18n;
 
 /** @var list<array<string, mixed>> $employees */
-/** @var list<array<string, mixed>> $departments */
+/** @var list<array<string, mixed>> $licenseClassesPool */
+/** @var list<array<string, mixed>> $abteilungenPool */
+/** @var list<array<string, mixed>> $standortePool */
 /** @var array<string, mixed>|null $selectedTeamUser */
 /** @var array<string, int> $selectedTeamUserStats */
 /** @var list<array<string, mixed>> $selectedTeamUserRequests */
@@ -74,15 +76,10 @@ $labelClass = 'block text-sm font-semibold text-emerald-800 mb-1.5';
                         <option value="Admin" <?= $selectedTeamUser['role'] === 'CEO' ? 'selected' : '' ?>>Administrator</option>
                     </select>
                 </div>
-                <div>
-                    <label class="<?= $labelClass ?>" for="team-dept"><?= I18n::get('ceo.department') ?></label>
-                    <select id="team-dept" name="department_id" class="<?= $inputClass ?>">
-                        <option value=""><?= I18n::get('ceo.department_none') ?></option>
-                        <?php foreach (($departments ?? []) as $dept): ?>
-                            <option value="<?= (int) $dept['id'] ?>" <?= ((string) $selectedTeamUser['department_id'] === (string) $dept['id']) ? 'selected' : '' ?>><?= htmlspecialchars($dept['name']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
+                <?php
+                $assignmentFormPrefix = 'team';
+                include __DIR__ . '/team-assignments.php';
+                ?>
                 <div>
                     <label class="<?= $labelClass ?>" for="team-vacation"><?= I18n::get('ceo.vacation_days') ?></label>
                     <input id="team-vacation" type="number" min="0" name="vacation_entitlement_days" value="<?= (int) $selectedTeamUser['vacation_entitlement_days'] ?>" class="<?= $inputClass ?>">
@@ -131,6 +128,21 @@ $labelClass = 'block text-sm font-semibold text-emerald-800 mb-1.5';
                 <?php foreach (($employees ?? []) as $emp): ?>
                     <?php
                     $searchHay = strtolower($emp['firstname'] . ' ' . $emp['lastname'] . ' ' . $emp['email'] . ' ' . $emp['mnr']);
+                    $metaParts = [];
+                    foreach ($emp['abteilungen'] ?? [] as $ab) {
+                        $metaParts[] = (string) ($ab['name'] ?? '');
+                    }
+                    foreach ($emp['license_classes'] ?? [] as $lc) {
+                        $metaParts[] = (string) ($lc['name'] ?? '');
+                    }
+                    foreach ($emp['standorte'] ?? [] as $st) {
+                        $label = (string) ($st['ort'] ?? '');
+                        if (!empty($st['basis'])) {
+                            $label .= ' (' . I18n::get('ceo.standort_primary_short') . ')';
+                        }
+                        $metaParts[] = $label;
+                    }
+                    $metaLine = implode(' · ', array_filter($metaParts));
                     $roleLabel = $emp['role'] === 'CEO' ? 'Admin' : 'Mitarbeiter';
                     $roleClass = $emp['role'] === 'CEO'
                         ? 'bg-blue-50 text-blue-800 border-blue-200'
@@ -144,6 +156,9 @@ $labelClass = 'block text-sm font-semibold text-emerald-800 mb-1.5';
                         <div class="flex-1 min-w-0">
                             <div class="truncate font-semibold text-emerald-900"><?= htmlspecialchars($emp['firstname'] . ' ' . $emp['lastname']) ?></div>
                             <div class="truncate text-[11px] text-emerald-600 mt-0.5"><?= htmlspecialchars($emp['email']) ?> · <?= htmlspecialchars($emp['mnr']) ?></div>
+                            <?php if ($metaLine !== ''): ?>
+                                <div class="truncate text-[10px] text-emerald-500/90 mt-0.5"><?= htmlspecialchars($metaLine) ?></div>
+                            <?php endif; ?>
                         </div>
                         <span class="shrink-0 hidden sm:inline-flex max-w-[6.5rem] truncate px-2 py-0.5 rounded-full text-[10px] font-bold border <?= $roleClass ?>"><?= htmlspecialchars($roleLabel) ?></span>
                         <span class="shrink-0 sm:hidden inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-bold border <?= $roleClass ?>"><?= $emp['role'] === 'CEO' ? 'A' : 'M' ?></span>
@@ -201,15 +216,11 @@ $labelClass = 'block text-sm font-semibold text-emerald-800 mb-1.5';
                         <option value="Admin">Administrator</option>
                     </select>
                 </div>
-                <div>
-                    <label class="<?= $labelClass ?>" for="create-dept"><?= I18n::get('ceo.department') ?></label>
-                    <select id="create-dept" name="department_id" class="<?= $inputClass ?>">
-                        <option value=""><?= I18n::get('ceo.department_none') ?></option>
-                        <?php foreach (($departments ?? []) as $dept): ?>
-                            <option value="<?= (int) $dept['id'] ?>"><?= htmlspecialchars($dept['name']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
+                <?php
+                $selectedTeamUser = ['license_class_ids' => [], 'abteilung_ids' => [], 'standort_ids' => [], 'primary_standort_id' => null];
+                $assignmentFormPrefix = 'create';
+                include __DIR__ . '/team-assignments.php';
+                ?>
                 <div>
                     <label class="<?= $labelClass ?>" for="create-vacation"><?= I18n::get('ceo.vacation_days') ?></label>
                     <input id="create-vacation" type="number" min="0" name="vacation_entitlement_days" value="25" class="<?= $inputClass ?>">
