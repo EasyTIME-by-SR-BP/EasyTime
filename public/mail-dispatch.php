@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 /**
  * Interner Mail-Worker (nur localhost).
- * Läuft unter Apache/mod_php — SMTP funktioniert dort zuverlässig, im CLI-Worker nicht.
+ * Läuft synchron bis SMTP fertig — der anstoßende curl wartet im Hintergrund.
  */
 $remoteIp = (string) ($_SERVER['REMOTE_ADDR'] ?? '');
 if (!in_array($remoteIp, ['127.0.0.1', '::1'], true)) {
@@ -39,26 +39,9 @@ if (
 set_time_limit(60);
 ignore_user_abort(true);
 
-$body = "OK\n";
-header('Content-Type: text/plain; charset=UTF-8');
-header('Content-Length: ' . (string) strlen($body));
-header('Connection: close');
-echo $body;
-
-if (function_exists('fastcgi_finish_request')) {
-    fastcgi_finish_request();
-} else {
-    @ini_set('zlib.output_compression', '0');
-    @ini_set('implicit_flush', '1');
-    if (function_exists('apache_setenv')) {
-        @apache_setenv('no-gzip', '1');
-    }
-    while (ob_get_level() > 0) {
-        ob_end_flush();
-    }
-    flush();
-}
-
 $argc = 2;
 $argv = [__FILE__, $realJob];
 require dirname(__DIR__) . '/scripts/dispatch-notification-mail.php';
+
+header('Content-Type: text/plain; charset=UTF-8');
+echo "OK\n";

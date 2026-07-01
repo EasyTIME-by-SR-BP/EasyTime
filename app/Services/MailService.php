@@ -113,9 +113,13 @@ class MailService {
 
     private static function triggerBackgroundDispatch(string $jobPath): bool {
         $url = 'http://127.0.0.1/mail-dispatch.php?job=' . rawurlencode($jobPath);
+        $logFile = sys_get_temp_dir() . '/easytime-mail-dispatch.log';
+        $workerLock = sys_get_temp_dir() . '/easytime-mail.worker.lock';
         $cmd = sprintf(
-            'nohup curl -s --max-time 2 %s > /dev/null 2>&1 &',
-            escapeshellarg($url)
+            'nohup flock -n %s -c %s >> %s 2>&1 < /dev/null &',
+            escapeshellarg($workerLock),
+            escapeshellarg('curl -s --max-time 60 ' . $url),
+            escapeshellarg($logFile)
         );
 
         if (!function_exists('exec')) {
@@ -188,13 +192,7 @@ class MailService {
         $mail->Body = $body;
         $mail->AltBody = $title . "\n\n" . $message . "\n\n" . $inboxUrl;
 
-        self::withSmtpLock(static function () use ($mail): void {
-            $mail->send();
-        });
-    }
-
-    private static function withSmtpLock(callable $send): void {
-        $send();
+        $mail->send();
     }
 
     /** Testversand — gleiche SMTP-Einstellungen wie Produktion (siehe scripts/mailtest.php). */
