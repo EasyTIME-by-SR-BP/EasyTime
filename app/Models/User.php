@@ -471,15 +471,71 @@ class User {
         return $ok;
     }
 
-    public static function generateResetToken($email) {
-        return false;
+    public static function createPasswordResetToken(int $userId): string {
+        if ($userId <= 0) {
+            return '';
+        }
+
+        self::clearResetToken($userId);
+
+        $token = bin2hex(random_bytes(32));
+        $expiresAt = time() + 3600;
+        \App\Core\Database::upsertAppSetting('pwd_reset_' . $token, $userId . ':' . $expiresAt);
+        \App\Core\Database::upsertAppSetting('pwd_reset_user_' . $userId, $token);
+
+        return $token;
     }
 
-    public static function verifyResetToken($token) {
-        return false;
+    public static function verifyResetToken(string $token): int {
+        $token = trim($token);
+        if ($token === '' || !preg_match('/^[a-f0-9]{64}$/', $token)) {
+            return 0;
+        }
+
+        $db = Database::getConnection();
+        $key = 'pwd_reset_' . $token;
+        if (Database::isMysql()) {
+            $stmt = $db->prepare('SELECT `value` FROM app_settings WHERE `key` = ? LIMIT 1');
+        } else {
+            $stmt = $db->prepare('SELECT value FROM app_settings WHERE key = ? LIMIT 1');
+        }
+        $stmt->execute([$key]);
+        $raw = (string) $stmt->fetchColumn();
+        if ($raw === '') {
+            return 0;
+        }
+
+        [$userId, $expiresAt] = array_pad(explode(':', $raw, 2), 2, 0);
+        if ((int) $userId <= 0 || (int) $expiresAt < time()) {
+            return 0;
+        }
+
+        return (int) $userId;
     }
 
-    public static function clearResetToken($userId) {
-        return true;
+    public static function clearResetToken(int $userId): void {
+        if ($userId <= 0) {
+            return;
+        }
+
+        $db = Database::getConnection();
+        $userKey = 'pwd_reset_user_' . $userId;
+        if (Database::isMysql()) {
+            $stmt = $db->prepare('SELECT `value` FROM app_settings WHERE `key` = ? LIMIT 1');
+        } else {
+            $stmt = $db->prepare('SELECT value FROM app_settings WHERE key = ? LIMIT 1');
+        }
+        $stmt->execute([$userKey]);
+        $token = trim((string) $stmt->fetchColumn());
+
+        if (Database::isMysql()) {
+            $del = $db->prepare('DELETE FROM app_settings WHERE `key` = ?');
+        } else {
+            $del = $db->prepare('DELETE FROM app_settings WHERE key = ?');
+        }
+        if ($token !== '') {
+            $del->execute(['pwd_reset_' . $token]);
+        }
+        $del->execute([$userKey]);
     }
 }

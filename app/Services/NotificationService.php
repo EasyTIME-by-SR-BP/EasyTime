@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Models\Request as VacationRequest;
 use App\Models\User;
+use App\Services\Inbox;
+use App\Services\MailService;
 
 class NotificationService {
     public static function onPasswordResetRequested(int $employeeId): void {
@@ -12,49 +14,23 @@ class NotificationService {
             return;
         }
 
-        $name = trim($emp['firstname'] . ' ' . $emp['lastname']);
-        $actionUrl = '/?tab=team&team_view=detail&team_user=' . $employeeId . '&focus=password';
-
-        Inbox::send([
-            'to' => 'admins',
-            'title' => 'Passwort-Hilfe angefordert',
-            'message' => "{$name} ({$emp['email']}, MNR {$emp['mnr']}) hat Passwort-Hilfe angefordert. Bitte neues Passwort setzen.",
-            'category' => 'password',
-            'type' => Inbox::TYPE_TASK,
-            'resolution' => Inbox::RESOLUTION_SHARED,
-            'thread_id' => 'pwd_reset_' . $employeeId,
-            'action_url' => $actionUrl,
-            'related_user_id' => $employeeId,
-        ]);
-
-        Inbox::send([
-            'to' => $employeeId,
-            'title' => 'Passwort-Hilfe angefordert',
-            'message' => 'Deine Anfrage wurde an die Administratoren weitergeleitet. Bitte warte, bis ein Administrator dir hilft. Du findest Updates hier in der Inbox.',
-            'category' => 'info',
-            'type' => Inbox::TYPE_INFO,
-            'resolution' => Inbox::RESOLUTION_INDIVIDUAL,
-            'dedupe' => false,
-        ]);
-    }
-
-    public static function onPasswordResetCompleted(int $employeeId, int $adminUserId): void {
-        $threadId = 'pwd_reset_' . $employeeId;
-        if (!Inbox::hasOpenThread($threadId)) {
+        $email = trim((string) ($emp['email'] ?? ''));
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
             return;
         }
 
-        Inbox::resolveThread($threadId, $adminUserId);
+        $token = User::createPasswordResetToken($employeeId);
+        if ($token === '') {
+            return;
+        }
 
-        Inbox::send([
-            'to' => $employeeId,
-            'title' => 'Passwort zurückgesetzt',
-            'message' => 'Ein Administrator hat dein Passwort zurückgesetzt. Du kannst dich jetzt mit dem neuen Passwort anmelden.',
-            'category' => 'success',
-            'type' => Inbox::TYPE_INFO,
-            'resolution' => Inbox::RESOLUTION_INDIVIDUAL,
-            'dedupe' => false,
-        ]);
+        $name = trim(($emp['firstname'] ?? '') . ' ' . ($emp['lastname'] ?? ''));
+        $resetUrl = MailService::absoluteUrl('/?reset_token=' . urlencode($token));
+        MailService::sendPasswordResetLink($email, $name, $resetUrl);
+    }
+
+    public static function onPasswordResetCompleted(int $employeeId, int $adminUserId): void {
+        // Self-service reset only — no admin inbox flow.
     }
 
     public static function onVacationRequested(int $requestId, int $employeeId): void {

@@ -7,7 +7,8 @@ $etToastMessages = [
         'employee_created' => ['text' => I18n::get('msg.employee_created'), 'duration' => 4500],
         'created' => ['text' => I18n::get('msg.request_created'), 'duration' => 4000],
         'decided' => ['text' => I18n::get('msg.decided'), 'duration' => 4000],
-        'password_reset_requested' => ['text' => I18n::get('msg.password_reset_requested'), 'duration' => 5000],
+        'password_reset_sent' => ['text' => I18n::get('msg.password_reset_sent'), 'duration' => 5000],
+        'password_reset_done' => ['text' => I18n::get('msg.password_reset_done'), 'duration' => 5000],
     ],
     'error' => [
         'invalid_mnr' => ['text' => I18n::get('msg.invalid_mnr'), 'duration' => 6000],

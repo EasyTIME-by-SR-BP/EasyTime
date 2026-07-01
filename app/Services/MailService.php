@@ -114,26 +114,29 @@ class MailService {
     private static function triggerBackgroundDispatch(string $jobPath): bool {
         $url = 'http://127.0.0.1/mail-dispatch.php?job=' . rawurlencode($jobPath);
         $logFile = sys_get_temp_dir() . '/easytime-mail-dispatch.log';
-        $workerLock = sys_get_temp_dir() . '/easytime-mail.worker.lock';
         $cmd = sprintf(
-            'nohup flock -n %s -c %s >> %s 2>&1 < /dev/null &',
-            escapeshellarg($workerLock),
-            escapeshellarg('curl -s --max-time 60 ' . $url),
+            'nohup curl -s --max-time 60 %s >> %s 2>&1 < /dev/null &',
+            escapeshellarg($url),
             escapeshellarg($logFile)
         );
 
-        if (!function_exists('exec')) {
-            error_log('[EasyTime Mail] exec() disabled — cannot start background worker');
-            return false;
+        if (function_exists('exec')) {
+            exec($cmd, $output, $exitCode);
+            if ($exitCode === 0) {
+                return true;
+            }
         }
 
-        exec($cmd, $output, $exitCode);
-        if ($exitCode !== 0) {
-            error_log('[EasyTime Mail] Background curl failed exit=' . $exitCode);
-            return false;
+        if (function_exists('popen')) {
+            $handle = @popen($cmd, 'r');
+            if (is_resource($handle)) {
+                pclose($handle);
+                return true;
+            }
         }
 
-        return true;
+        error_log('[EasyTime Mail] Could not start background worker for ' . basename($jobPath));
+        return false;
     }
 
     /**
@@ -205,6 +208,7 @@ class MailService {
             return;
         }
 
+        @chmod($lockPath, 0666);
         flock($fp, LOCK_EX);
         try {
             $send();
@@ -212,6 +216,46 @@ class MailService {
             flock($fp, LOCK_UN);
             fclose($fp);
         }
+    }
+
+    public static function sendPasswordResetLink(string $toEmail, string $recipientName, string $resetUrl): void {
+        if (!self::isEnabled()) {
+            return;
+        }
+
+        if ($toEmail === '' || !filter_var($toEmail, FILTER_VALIDATE_EMAIL)) {
+            return;
+        }
+        if (str_ends_with(strtolower($toEmail), '@demo.easytime.at')) {
+            return;
+        }
+
+        self::ensureAutoload();
+
+        $mail = new PHPMailer(true);
+        $mail->CharSet = PHPMailer::CHARSET_UTF8;
+        self::applySmtpTransport($mail);
+
+        $fromAddress = (string) (getenv('MAIL_FROM_ADDRESS') ?: 'easytime@easydrivers.at');
+        $fromName = (string) (getenv('MAIL_FROM_NAME') ?: 'EasyTime');
+        $mail->setFrom($fromAddress, $fromName);
+        $mail->addReplyTo($fromAddress, $fromName);
+        $mail->addAddress($toEmail);
+        $mail->isHTML(true);
+        $mail->Subject = 'EasyTime – Passwort zurücksetzen';
+
+        $name = htmlspecialchars($recipientName !== '' ? $recipientName : $toEmail, ENT_QUOTES, 'UTF-8');
+        $link = htmlspecialchars($resetUrl, ENT_QUOTES, 'UTF-8');
+        $mail->Body = '<b>Passwort zurücksetzen</b><br><br>Hallo ' . $name . ',<br><br>'
+            . 'du hast ein neues Passwort für EasyTime angefordert. Klicke auf den Link (gültig für 1 Stunde):<br><br>'
+            . '<a href="' . $link . '">Passwort jetzt zurücksetzen</a>';
+        $mail->AltBody = "Passwort zurücksetzen\n\nHallo {$recipientName},\n\nLink (1 Stunde gültig):\n{$resetUrl}";
+
+        self::withSmtpLock(static function () use ($mail): void {
+            $mail->send();
+        });
+
+        error_log('[EasyTime Mail] Sent password reset link to ' . $toEmail);
     }
 
     /** Testversand — gleiche SMTP-Einstellungen wie Produktion (siehe scripts/mailtest.php). */

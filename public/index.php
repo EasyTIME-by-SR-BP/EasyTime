@@ -22,10 +22,15 @@ use App\Models\VacationSchedule;
 use App\Models\RequestEvent;
 use App\Services\NotificationService;
 use App\Services\Inbox;
+use App\Services\MailService;
 use App\Core\I18n;
 use App\Core\AustrianHolidays;
 
 session_start();
+
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
+    MailService::retryStaleJobs(2);
+}
 
 if (!isset($_SESSION['lang'])) {
     $_SESSION['lang'] = 'de';
@@ -72,12 +77,22 @@ if (!isset($_SESSION['user_id'])) {
                     NotificationService::onPasswordResetRequested((int) $user['id']);
                 }
             }
-            header('Location: /?success=password_reset_requested');
+            header('Location: /?success=password_reset_sent');
             exit;
         }
 
         if ($action === 'do_reset_password') {
-            header('Location: /?error=invalid_request');
+            $token = trim((string) ($_POST['reset_token'] ?? ''));
+            $password = (string) ($_POST['password'] ?? '');
+            $passwordConfirm = (string) ($_POST['password_confirm'] ?? '');
+            $userId = User::verifyResetToken($token);
+            if ($userId > 0 && $password !== '' && $password === $passwordConfirm && strlen($password) >= 6) {
+                User::updatePassword($userId, password_hash($password, PASSWORD_DEFAULT), true);
+                User::clearResetToken($userId);
+                header('Location: /?success=password_reset_done');
+                exit;
+            }
+            header('Location: /?reset_token=' . rawurlencode($token) . '&error=reset_failed');
             exit;
         }
     }
@@ -632,7 +647,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             isset($_POST['overtime_hours']) ? (float) $_POST['overtime_hours'] : 0
         );
         if (!empty($_POST['password'])) {
-            NotificationService::onPasswordResetCompleted((int) $_POST['emp_id'], (int) $currentUser['id']);
+            // Admin password change — no inbox notification.
         }
         header("Location: /?success=action_success");
         exit;

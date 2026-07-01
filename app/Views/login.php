@@ -1,17 +1,22 @@
 <?php
 use App\Core\I18n;
+use App\Models\User;
 
 $isForgot = isset($_GET['forgot']);
+$resetToken = trim((string) ($_GET['reset_token'] ?? ''));
+$isReset = $resetToken !== '' && User::verifyResetToken($resetToken) > 0;
 $loginError = isset($_GET['error']) ? (string) $_GET['error'] : '';
 $loginSuccess = isset($_GET['success']) ? (string) $_GET['success'] : '';
 
 $loginErrorMessage = match ($loginError) {
     'login_failed' => I18n::get('login.invalid_credentials'),
+    'reset_failed' => I18n::get('reset.failed'),
     default => $loginError !== '' ? I18n::get('msg.generic_error') : '',
 };
 
 $loginSuccessMessage = match ($loginSuccess) {
-    'password_reset_requested' => I18n::get('msg.password_reset_requested'),
+    'password_reset_sent' => I18n::get('msg.password_reset_sent'),
+    'password_reset_done' => I18n::get('msg.password_reset_done'),
     default => '',
 };
 ?>
@@ -156,7 +161,9 @@ $loginSuccessMessage = match ($loginSuccess) {
             <div class="text-center">
                 <img src="/assets/icons/urlaubsplaner_icon.svg" alt="Urlaubsplaner" class="mx-auto mb-6 h-16 w-16 rounded-2xl shadow-lg shadow-lime-400/30">
                 <h2 class="text-3xl font-bold text-emerald-900 tracking-tight">Easy<span class="text-lime-600">Time</span></h2>
-                <?php if ($isForgot): ?>
+                <?php if ($isReset): ?>
+                    <p class="mt-2 text-emerald-600"><?= I18n::get('reset.new_password_title') ?></p>
+                <?php elseif ($isForgot): ?>
                     <p class="mt-2 text-emerald-600"><?= I18n::get('reset.title') ?></p>
                 <?php else: ?>
                     <p class="mt-2 text-emerald-600"><?= I18n::get('login.welcome') ?></p>
@@ -175,7 +182,29 @@ $loginSuccessMessage = match ($loginSuccess) {
                 </div>
             <?php endif; ?>
 
-            <?php if ($isForgot): ?>
+            <?php if ($isReset): ?>
+                <form class="mt-8 space-y-6" action="/?action=do_reset_password" method="POST">
+                    <input type="hidden" name="reset_token" value="<?= htmlspecialchars($resetToken, ENT_QUOTES, 'UTF-8') ?>">
+                    <div class="space-y-4">
+                        <div>
+                            <label for="password" class="block text-sm font-semibold text-emerald-800 mb-1.5"><?= I18n::get('reset.new_password') ?></label>
+                            <input id="password" name="password" type="password" minlength="6" required class="appearance-none relative block w-full px-4 py-3 border border-yellow-200 bg-yellow-50/50 text-emerald-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-lime-400 transition-all font-medium">
+                        </div>
+                        <div>
+                            <label for="password_confirm" class="block text-sm font-semibold text-emerald-800 mb-1.5"><?= I18n::get('reset.new_password_confirm') ?></label>
+                            <input id="password_confirm" name="password_confirm" type="password" minlength="6" required class="appearance-none relative block w-full px-4 py-3 border border-yellow-200 bg-yellow-50/50 text-emerald-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-lime-400 transition-all font-medium">
+                        </div>
+                    </div>
+                    <div class="flex flex-col gap-3">
+                        <button type="submit" class="et-btn-primary w-full flex justify-center py-3.5 px-4 border border-transparent text-sm font-bold rounded-xl focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-lime-500 transition-all shadow-lg shadow-lime-400/40">
+                            <?= I18n::get('reset.save_password') ?>
+                        </button>
+                        <a href="/" class="text-center text-sm font-medium text-emerald-600 hover:text-lime-600 transition-colors">
+                            <?= I18n::get('reset.back') ?>
+                        </a>
+                    </div>
+                </form>
+            <?php elseif ($isForgot): ?>
                 <!-- FORGOT PASSWORD FORM -->
                 <form class="mt-8 space-y-6" action="/?action=forgot_password" method="POST">
                     <div>
