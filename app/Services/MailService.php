@@ -36,6 +36,39 @@ class MailService {
     }
 
     /**
+     * Mail im Hintergrund senden — blockiert HTTP-Requests (Antrag/Genehmigung) nicht.
+     *
+     * @param array<string, mixed> $payload
+     */
+    public static function dispatchForNotification(int $userId, int $notificationId, array $payload): void {
+        if (!self::shouldSend($payload)) {
+            return;
+        }
+
+        $job = [
+            'userId' => $userId,
+            'notificationId' => $notificationId,
+            'payload' => $payload,
+        ];
+        $jobPath = sys_get_temp_dir() . '/easytime-mail-' . $notificationId . '-' . bin2hex(random_bytes(4)) . '.json';
+        if (@file_put_contents($jobPath, json_encode($job, JSON_UNESCAPED_UNICODE)) === false) {
+            error_log('[EasyTime Mail] Could not write job file, sending inline for notification #' . $notificationId);
+            self::sendForNotification($userId, $notificationId, $payload);
+            return;
+        }
+
+        $script = dirname(__DIR__, 2) . '/scripts/dispatch-notification-mail.php';
+        if (!is_file($script) || !function_exists('exec')) {
+            @unlink($jobPath);
+            self::sendForNotification($userId, $notificationId, $payload);
+            return;
+        }
+
+        $cmd = 'php ' . escapeshellarg($script) . ' ' . escapeshellarg($jobPath) . ' > /dev/null 2>&1 &';
+        @exec($cmd);
+    }
+
+    /**
      * @param array<string, mixed> $payload
      */
     private static function shouldSend(array $payload): bool {
@@ -140,6 +173,8 @@ class MailService {
                 'allow_self_signed' => true,
             ],
         ];
+
+        $mail->Timeout = (int) (getenv('MAIL_SMTP_TIMEOUT') ?: 15);
     }
 
     private static function configureTransport(PHPMailer $mail): void {
