@@ -128,11 +128,16 @@ class MailService {
             ? PHP_BINARY
             : 'php';
         $logFile = sys_get_temp_dir() . '/easytime-mail-dispatch.log';
+        $workerLock = sys_get_temp_dir() . '/easytime-mail.worker.lock';
         $cmd = sprintf(
-            'nohup %s %s %s >> %s 2>&1 < /dev/null &',
-            escapeshellarg($phpBin),
-            escapeshellarg($script),
-            escapeshellarg($jobPath),
+            'nohup flock -n %s -c %s >> %s 2>&1 < /dev/null &',
+            escapeshellarg($workerLock),
+            escapeshellarg(sprintf(
+                '%s %s %s',
+                $phpBin,
+                $script,
+                $jobPath
+            )),
             escapeshellarg($logFile)
         );
 
@@ -226,28 +231,7 @@ class MailService {
     }
 
     private static function withSmtpLock(callable $send): void {
-        $lockPath = sys_get_temp_dir() . '/easytime-mail.smtp.lock';
-        $fp = @fopen($lockPath, 'c');
-        if ($fp === false) {
-            $send();
-            return;
-        }
-
-        $deadline = time() + 25;
-        while (!flock($fp, LOCK_EX | LOCK_NB)) {
-            if (time() >= $deadline) {
-                fclose($fp);
-                throw new \RuntimeException('SMTP lock timeout');
-            }
-            usleep(200_000);
-        }
-
-        try {
-            $send();
-        } finally {
-            flock($fp, LOCK_UN);
-            fclose($fp);
-        }
+        $send();
     }
 
     /** Testversand — gleiche SMTP-Einstellungen wie Produktion (siehe scripts/mailtest.php). */

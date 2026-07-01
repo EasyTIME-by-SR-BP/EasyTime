@@ -14,9 +14,9 @@ if (!is_file($jobPath)) {
 }
 
 $job = json_decode((string) file_get_contents($jobPath), true);
-@unlink($jobPath);
 
 if (!is_array($job)) {
+    @unlink($jobPath);
     error_log('[EasyTime Mail] Dispatch invalid job JSON');
     exit(1);
 }
@@ -78,6 +78,7 @@ use App\Services\MailService;
 try {
     error_log('[EasyTime Mail] Dispatch start notification #' . $notificationId . ' user #' . $userId);
     MailService::sendForNotification($userId, $notificationId, $payload);
+    @unlink($jobPath);
     error_log('[EasyTime Mail] Dispatch done notification #' . $notificationId);
 } catch (Throwable $e) {
     error_log('[EasyTime Mail] Dispatch failed notification #' . $notificationId . ': ' . $e->getMessage());
