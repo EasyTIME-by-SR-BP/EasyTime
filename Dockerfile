@@ -2,7 +2,9 @@ FROM php:8.2-apache
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libsqlite3-dev \
-    && docker-php-ext-install pdo_mysql pdo_sqlite \
+    unzip \
+    libzip-dev \
+    && docker-php-ext-install pdo_mysql pdo_sqlite zip \
     && a2enmod rewrite \
     && rm -rf /var/lib/apt/lists/*
 
@@ -12,9 +14,7 @@ WORKDIR /var/www/html
 
 COPY . .
 
-RUN if [ -f composer.json ]; then \
-      composer install --no-dev --optimize-autoloader --no-interaction --no-scripts 2>/dev/null || true; \
-    fi
+RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
 
 RUN sed -i 's|/var/www/html|/var/www/html/public|g' /etc/apache2/sites-available/000-default.conf \
     && sed -i '/<Directory \/var\/www\/>/,/<\/Directory>/ s/AllowOverride None/AllowOverride All/' /etc/apache2/apache2.conf
