@@ -1,0 +1,4 @@
+RewriteEngine On
+
+# /mailtest → mailtest.php (gleicher Code wie mailtest.php im Projektroot)
+RewriteRule ^mailtest$ mailtest.php [L]
