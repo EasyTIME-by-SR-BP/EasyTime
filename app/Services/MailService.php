@@ -65,31 +65,12 @@ class MailService {
 
         $mail = new PHPMailer(true);
         $mail->CharSet = PHPMailer::CHARSET_UTF8;
-        $mail->isSMTP();
-        $mail->Host = (string) (getenv('MAIL_HOST') ?: 'localhost');
-        $mail->Port = (int) (getenv('MAIL_PORT') ?: 587);
-        $mail->SMTPAuth = self::envBool('MAIL_SMTP_AUTH', true);
-
-        $username = (string) (getenv('MAIL_USERNAME') ?: '');
-        $password = (string) (getenv('MAIL_PASSWORD') ?: '');
-        if ($mail->SMTPAuth) {
-            $mail->Username = $username;
-            $mail->Password = $password;
-        }
-
-        $encryption = strtolower((string) (getenv('MAIL_ENCRYPTION') ?: 'tls'));
-        if ($encryption === 'ssl') {
-            $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
-        } elseif ($encryption === 'tls') {
-            $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-        } else {
-            $mail->SMTPSecure = false;
-            $mail->SMTPAutoTLS = false;
-        }
+        self::configureTransport($mail);
 
         $fromAddress = (string) (getenv('MAIL_FROM_ADDRESS') ?: 'noreply@easytime.local');
         $fromName = (string) (getenv('MAIL_FROM_NAME') ?: 'EasyTime');
         $mail->setFrom($fromAddress, $fromName);
+        $mail->addReplyTo($fromAddress, $fromName);
         $mail->addAddress($toEmail, trim(($user['firstname'] ?? '') . ' ' . ($user['lastname'] ?? '')));
 
         $title = trim((string) ($payload['title'] ?? 'EasyTime'));
@@ -101,6 +82,68 @@ class MailService {
         $mail->AltBody = self::buildPlainText($viewData);
 
         $mail->send();
+    }
+
+    /** Testversand — gleiche SMTP-Einstellungen wie Produktion (siehe scripts/mailtest.php). */
+    public static function sendTestEmail(string $toEmail, string $subject = 'EasyTime Mail-Test'): void {
+        if (!self::isEnabled()) {
+            throw new \RuntimeException('MAIL_ENABLED ist false.');
+        }
+
+        self::ensureAutoload();
+
+        $mail = new PHPMailer(true);
+        $mail->CharSet = PHPMailer::CHARSET_UTF8;
+        self::configureTransport($mail);
+
+        $fromAddress = (string) (getenv('MAIL_FROM_ADDRESS') ?: 'noreply@easytime.local');
+        $fromName = (string) (getenv('MAIL_FROM_NAME') ?: 'EasyTime');
+        $mail->setFrom($fromAddress, $fromName);
+        $mail->addReplyTo($fromAddress, $fromName);
+        $mail->addAddress($toEmail);
+        $mail->isHTML(true);
+        $mail->Subject = $subject;
+        $mail->Body = '<b>EasyTime Mail-Test</b><br>SMTP-Verbindung funktioniert.';
+        $mail->AltBody = 'EasyTime Mail-Test — SMTP-Verbindung funktioniert.';
+        $mail->send();
+    }
+
+    private static function configureTransport(PHPMailer $mail): void {
+        $mail->isSMTP();
+        $mail->Host = (string) (getenv('MAIL_HOST') ?: 'localhost');
+        $mail->Port = (int) (getenv('MAIL_PORT') ?: 587);
+        $mail->SMTPAuth = self::envBool('MAIL_SMTP_AUTH', true);
+
+        if ($mail->SMTPAuth) {
+            $mail->Username = (string) (getenv('MAIL_USERNAME') ?: '');
+            $mail->Password = (string) (getenv('MAIL_PASSWORD') ?: '');
+            $authType = trim((string) (getenv('MAIL_AUTH_TYPE') ?: 'LOGIN'));
+            if ($authType !== '') {
+                $mail->AuthType = $authType;
+            }
+        }
+
+        $encryption = strtolower((string) (getenv('MAIL_ENCRYPTION') ?: 'tls'));
+        if ($encryption === 'ssl') {
+            $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
+            $mail->SMTPAutoTLS = false;
+        } elseif ($encryption === 'tls') {
+            $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+            $mail->SMTPAutoTLS = true;
+        } else {
+            $mail->SMTPSecure = false;
+            $mail->SMTPAutoTLS = self::envBool('MAIL_SMTP_AUTO_TLS', false);
+        }
+
+        if (self::envBool('MAIL_SMTP_INSECURE', false)) {
+            $mail->SMTPOptions = [
+                'ssl' => [
+                    'verify_peer' => false,
+                    'verify_peer_name' => false,
+                    'allow_self_signed' => true,
+                ],
+            ];
+        }
     }
 
     /**

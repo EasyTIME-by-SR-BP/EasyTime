@@ -102,6 +102,8 @@ jobs:
             MAIL_PASSWORD="$(pick_env MAIL_PASSWORD '${{ secrets.MAIL_PASSWORD }}' '')"
             MAIL_ENCRYPTION="$(pick_env MAIL_ENCRYPTION '${{ vars.MAIL_ENCRYPTION }}' 'tls')"
             MAIL_SMTP_AUTH="$(pick_env MAIL_SMTP_AUTH '${{ vars.MAIL_SMTP_AUTH }}' 'true')"
+            MAIL_AUTH_TYPE="$(pick_env MAIL_AUTH_TYPE '${{ vars.MAIL_AUTH_TYPE }}' 'LOGIN')"
+            MAIL_SMTP_INSECURE="$(pick_env MAIL_SMTP_INSECURE '${{ vars.MAIL_SMTP_INSECURE }}' 'false')"
             MAIL_NOTIFY_TASKS="$(pick_env MAIL_NOTIFY_TASKS '${{ vars.MAIL_NOTIFY_TASKS }}' 'true')"
             MAIL_NOTIFY_INFO="$(pick_env MAIL_NOTIFY_INFO '${{ vars.MAIL_NOTIFY_INFO }}' 'false')"
 
@@ -126,6 +128,8 @@ jobs:
             MAIL_PASSWORD=${MAIL_PASSWORD}
             MAIL_ENCRYPTION=${MAIL_ENCRYPTION}
             MAIL_SMTP_AUTH=${MAIL_SMTP_AUTH}
+            MAIL_AUTH_TYPE=${MAIL_AUTH_TYPE}
+            MAIL_SMTP_INSECURE=${MAIL_SMTP_INSECURE}
             MAIL_NOTIFY_TASKS=${MAIL_NOTIFY_TASKS}
             MAIL_NOTIFY_INFO=${MAIL_NOTIFY_INFO}
             EOF
