@@ -192,7 +192,26 @@ class MailService {
         $mail->Body = $body;
         $mail->AltBody = $title . "\n\n" . $message . "\n\n" . $inboxUrl;
 
-        $mail->send();
+        self::withSmtpLock(static function () use ($mail): void {
+            $mail->send();
+        });
+    }
+
+    private static function withSmtpLock(callable $send): void {
+        $lockPath = sys_get_temp_dir() . '/easytime-mail.smtp.lock';
+        $fp = @fopen($lockPath, 'c');
+        if ($fp === false) {
+            $send();
+            return;
+        }
+
+        flock($fp, LOCK_EX);
+        try {
+            $send();
+        } finally {
+            flock($fp, LOCK_UN);
+            fclose($fp);
+        }
     }
 
     /** Testversand — gleiche SMTP-Einstellungen wie Produktion (siehe scripts/mailtest.php). */
