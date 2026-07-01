@@ -252,7 +252,11 @@ class MailService {
         }
 
         $encryption = strtolower((string) (getenv('MAIL_ENCRYPTION') ?: 'tls'));
-        if ($encryption === 'ssl') {
+        $insecure = self::envBool('MAIL_SMTP_INSECURE', false);
+        if ($insecure || in_array($encryption, ['none', 'false', 'off', ''], true)) {
+            $mail->SMTPSecure = false;
+            $mail->SMTPAutoTLS = false;
+        } elseif ($encryption === 'ssl') {
             $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
             $mail->SMTPAutoTLS = false;
         } elseif ($encryption === 'tls') {
