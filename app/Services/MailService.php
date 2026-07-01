@@ -25,6 +25,7 @@ class MailService {
 
         $email = trim((string) ($user['email'] ?? ''));
         if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            error_log('[EasyTime Mail] Skipped notification #' . $notificationId . ': invalid recipient email');
             return;
         }
 
@@ -64,8 +65,17 @@ class MailService {
             return;
         }
 
-        $cmd = 'php ' . escapeshellarg($script) . ' ' . escapeshellarg($jobPath) . ' > /dev/null 2>&1 &';
-        @exec($cmd);
+        $phpBin = (defined('PHP_BINARY') && PHP_BINARY !== '') ? PHP_BINARY : 'php';
+        $logFile = sys_get_temp_dir() . '/easytime-mail-dispatch.log';
+        $cmd = sprintf(
+            'nohup %s %s %s >> %s 2>&1 < /dev/null &',
+            escapeshellarg($phpBin),
+            escapeshellarg($script),
+            escapeshellarg($jobPath),
+            escapeshellarg($logFile)
+        );
+        exec($cmd, $output, $exitCode);
+        error_log('[EasyTime Mail] Dispatched notification #' . $notificationId . ' (exit=' . $exitCode . ')');
     }
 
     /**
