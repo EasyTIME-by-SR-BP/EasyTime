@@ -48,7 +48,7 @@ class MailService {
             return self::envBool('MAIL_NOTIFY_TASKS', true);
         }
 
-        if ($type !== Inbox::TYPE_INFO || !self::envBool('MAIL_NOTIFY_INFO', false)) {
+        if ($type !== Inbox::TYPE_INFO || !self::envBool('MAIL_NOTIFY_INFO', true)) {
             return false;
         }
 
@@ -65,7 +65,7 @@ class MailService {
 
         $mail = new PHPMailer(true);
         $mail->CharSet = PHPMailer::CHARSET_UTF8;
-        self::configureTransport($mail);
+        self::applySmtpTransport($mail);
 
         $fromAddress = (string) (getenv('MAIL_FROM_ADDRESS') ?: 'noreply@easytime.local');
         $fromName = (string) (getenv('MAIL_FROM_NAME') ?: 'EasyTime');
@@ -94,7 +94,7 @@ class MailService {
 
         $mail = new PHPMailer(true);
         $mail->CharSet = PHPMailer::CHARSET_UTF8;
-        self::configureTransport($mail);
+        self::applySmtpTransport($mail);
 
         $fromAddress = (string) (getenv('MAIL_FROM_ADDRESS') ?: 'noreply@easytime.local');
         $fromName = (string) (getenv('MAIL_FROM_NAME') ?: 'EasyTime');
@@ -108,19 +108,17 @@ class MailService {
         $mail->send();
     }
 
-    private static function configureTransport(PHPMailer $mail): void {
+    /** Gleiche SMTP-Einstellungen wie mailtest.php — einheitlich für alle Mails. */
+    public static function applySmtpTransport(PHPMailer $mail): void {
         $mail->isSMTP();
-        $mail->Host = (string) (getenv('MAIL_HOST') ?: 'localhost');
-        $mail->Port = (int) (getenv('MAIL_PORT') ?: 587);
+        $mail->Host = (string) (getenv('MAIL_HOST') ?: 'pop.easydrivers.at');
+        $mail->Port = (int) (getenv('MAIL_PORT') ?: 25);
         $mail->SMTPAuth = self::envBool('MAIL_SMTP_AUTH', true);
 
         if ($mail->SMTPAuth) {
             $mail->Username = (string) (getenv('MAIL_USERNAME') ?: '');
             $mail->Password = (string) (getenv('MAIL_PASSWORD') ?: '');
-            $authType = trim((string) (getenv('MAIL_AUTH_TYPE') ?: 'LOGIN'));
-            if ($authType !== '') {
-                $mail->AuthType = $authType;
-            }
+            $mail->AuthType = (string) (getenv('MAIL_AUTH_TYPE') ?: 'LOGIN');
         }
 
         $encryption = strtolower((string) (getenv('MAIL_ENCRYPTION') ?: 'tls'));
@@ -132,18 +130,20 @@ class MailService {
             $mail->SMTPAutoTLS = true;
         } else {
             $mail->SMTPSecure = false;
-            $mail->SMTPAutoTLS = self::envBool('MAIL_SMTP_AUTO_TLS', false);
+            $mail->SMTPAutoTLS = self::envBool('MAIL_SMTP_AUTO_TLS', true);
         }
 
-        if (self::envBool('MAIL_SMTP_INSECURE', false)) {
-            $mail->SMTPOptions = [
-                'ssl' => [
-                    'verify_peer' => false,
-                    'verify_peer_name' => false,
-                    'allow_self_signed' => true,
-                ],
-            ];
-        }
+        $mail->SMTPOptions = [
+            'ssl' => [
+                'verify_peer' => false,
+                'verify_peer_name' => false,
+                'allow_self_signed' => true,
+            ],
+        ];
+    }
+
+    private static function configureTransport(PHPMailer $mail): void {
+        self::applySmtpTransport($mail);
     }
 
     /**

@@ -1,5 +1,6 @@
 <?php
 
+use App\Services\MailService;
 use PHPMailer\PHPMailer\Exception;
 use PHPMailer\PHPMailer\PHPMailer;
 
@@ -11,28 +12,22 @@ if (!is_file($autoload)) {
 }
 require $autoload;
 
+spl_autoload_register(function ($class) {
+    if (strpos($class, 'App\\') === 0) {
+        $file = __DIR__ . '/' . lcfirst(str_replace('\\', '/', $class)) . '.php';
+        if (is_file($file)) {
+            require $file;
+        }
+    }
+});
+
 header('Content-Type: text/plain; charset=UTF-8');
 
 $mail = new PHPMailer(true);
 
 try {
     $mail->SMTPDebug = 0;
-    $mail->isSMTP();
-    $mail->Host = (string) (getenv('MAIL_HOST') ?: 'pop.easydrivers.at');
-    $mail->SMTPAuth = true;
-    $mail->Username = (string) (getenv('MAIL_USERNAME') ?: 'easy\\easytime');
-    $mail->Password = (string) (getenv('MAIL_PASSWORD') ?: '');
-    $mail->Port = (int) (getenv('MAIL_PORT') ?: 25);
-    $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-    $mail->SMTPOptions = [
-        'ssl' => [
-            'verify_peer' => false,
-            'verify_peer_name' => false,
-            'allow_self_signed' => true,
-        ],
-    ];
-    $mail->SMTPAutoTLS = true;
-    $mail->AuthType = (string) (getenv('MAIL_AUTH_TYPE') ?: 'LOGIN');
+    MailService::applySmtpTransport($mail);
 
     $from = (string) (getenv('MAIL_FROM_ADDRESS') ?: 'easytime@easydrivers.at');
     $mail->setFrom($from);
