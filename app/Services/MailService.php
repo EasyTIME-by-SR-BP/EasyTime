@@ -43,7 +43,7 @@ class MailService {
     }
 
     /**
-     * Mail asynchron per Datei-Queue + CLI-Worker (blockiert den Request nicht).
+     * Mail asynchron per Datei-Queue + Apache-Worker (blockiert den Request nicht).
      *
      * @param array<string, mixed> $payload
      */
@@ -112,37 +112,20 @@ class MailService {
     }
 
     private static function triggerBackgroundDispatch(string $jobPath): bool {
-        $script = dirname(__DIR__, 2) . '/scripts/dispatch-notification-mail.php';
-        if (!is_file($script)) {
-            error_log('[EasyTime Mail] Dispatch script missing: ' . $script);
-            return false;
-        }
+        $url = 'http://127.0.0.1/mail-dispatch.php?job=' . rawurlencode($jobPath);
+        $cmd = sprintf(
+            'nohup curl -s --max-time 2 %s > /dev/null 2>&1 &',
+            escapeshellarg($url)
+        );
 
         if (!function_exists('exec')) {
             error_log('[EasyTime Mail] exec() disabled — cannot start background worker');
             return false;
         }
 
-        $phpBin = (defined('PHP_BINARY') && PHP_BINARY !== '' && is_executable(PHP_BINARY))
-            ? PHP_BINARY
-            : 'php';
-        $logFile = sys_get_temp_dir() . '/easytime-mail-dispatch.log';
-        $workerLock = sys_get_temp_dir() . '/easytime-mail.worker.lock';
-        $cmd = sprintf(
-            'nohup flock -n %s -c %s >> %s 2>&1 < /dev/null &',
-            escapeshellarg($workerLock),
-            escapeshellarg(sprintf(
-                '%s %s %s',
-                $phpBin,
-                $script,
-                $jobPath
-            )),
-            escapeshellarg($logFile)
-        );
-
         exec($cmd, $output, $exitCode);
         if ($exitCode !== 0) {
-            error_log('[EasyTime Mail] Background exec failed exit=' . $exitCode);
+            error_log('[EasyTime Mail] Background curl failed exit=' . $exitCode);
             return false;
         }
 
