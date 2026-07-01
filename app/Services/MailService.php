@@ -28,54 +28,17 @@ class MailService {
             error_log('[EasyTime Mail] Skipped notification #' . $notificationId . ': invalid recipient email');
             return;
         }
+        if (str_ends_with(strtolower($email), '@demo.easytime.at')) {
+            error_log('[EasyTime Mail] Skipped notification #' . $notificationId . ': demo address ' . $email);
+            return;
+        }
 
         try {
             self::deliver($email, $user, $notificationId, $payload);
+            error_log('[EasyTime Mail] Sent notification #' . $notificationId . ' to ' . $email);
         } catch (\Throwable $e) {
             error_log('[EasyTime Mail] Failed for notification #' . $notificationId . ': ' . $e->getMessage());
         }
-    }
-
-    /**
-     * Mail im Hintergrund senden — blockiert HTTP-Requests (Antrag/Genehmigung) nicht.
-     *
-     * @param array<string, mixed> $payload
-     */
-    public static function dispatchForNotification(int $userId, int $notificationId, array $payload): void {
-        if (!self::shouldSend($payload)) {
-            return;
-        }
-
-        $job = [
-            'userId' => $userId,
-            'notificationId' => $notificationId,
-            'payload' => $payload,
-        ];
-        $jobPath = sys_get_temp_dir() . '/easytime-mail-' . $notificationId . '-' . bin2hex(random_bytes(4)) . '.json';
-        if (@file_put_contents($jobPath, json_encode($job, JSON_UNESCAPED_UNICODE)) === false) {
-            error_log('[EasyTime Mail] Could not write job file, sending inline for notification #' . $notificationId);
-            self::sendForNotification($userId, $notificationId, $payload);
-            return;
-        }
-
-        $script = dirname(__DIR__, 2) . '/scripts/dispatch-notification-mail.php';
-        if (!is_file($script) || !function_exists('exec')) {
-            @unlink($jobPath);
-            self::sendForNotification($userId, $notificationId, $payload);
-            return;
-        }
-
-        $phpBin = (defined('PHP_BINARY') && PHP_BINARY !== '') ? PHP_BINARY : 'php';
-        $logFile = sys_get_temp_dir() . '/easytime-mail-dispatch.log';
-        $cmd = sprintf(
-            'nohup %s %s %s >> %s 2>&1 < /dev/null &',
-            escapeshellarg($phpBin),
-            escapeshellarg($script),
-            escapeshellarg($jobPath),
-            escapeshellarg($logFile)
-        );
-        exec($cmd, $output, $exitCode);
-        error_log('[EasyTime Mail] Dispatched notification #' . $notificationId . ' (exit=' . $exitCode . ')');
     }
 
     /**
@@ -107,22 +70,31 @@ class MailService {
         self::ensureAutoload();
 
         $mail = new PHPMailer(true);
-        $mail->CharSet = PHPMailer::CHARSET_UTF8;
+        $mail->SMTPDebug = 0;
         self::applySmtpTransport($mail);
 
-        $fromAddress = (string) (getenv('MAIL_FROM_ADDRESS') ?: 'noreply@easytime.local');
-        $fromName = (string) (getenv('MAIL_FROM_NAME') ?: 'EasyTime');
-        $mail->setFrom($fromAddress, $fromName);
-        $mail->addReplyTo($fromAddress, $fromName);
-        $mail->addAddress($toEmail, trim(($user['firstname'] ?? '') . ' ' . ($user['lastname'] ?? '')));
+        $fromAddress = (string) (getenv('MAIL_FROM_ADDRESS') ?: 'easytime@easydrivers.at');
+        $mail->setFrom($fromAddress);
+        $mail->addReplyTo($fromAddress);
+        $mail->addAddress($toEmail);
 
         $title = trim((string) ($payload['title'] ?? 'EasyTime'));
+        $message = trim((string) ($payload['message'] ?? ''));
         $mail->Subject = $title;
         $mail->isHTML(true);
 
-        $viewData = self::buildViewData($user, $notificationId, $payload);
-        $mail->Body = self::renderTemplate('notification', $viewData);
-        $mail->AltBody = self::buildPlainText($viewData);
+        $inboxUrl = self::absoluteUrl('/?tab=inbox&notification_id=' . $notificationId);
+        $actionUrl = trim((string) ($payload['action_url'] ?? ''));
+        $actionAbsoluteUrl = $actionUrl !== '' ? self::absoluteUrl($actionUrl) : '';
+
+        $body = '<b>' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</b><br>'
+            . nl2br(htmlspecialchars($message, ENT_QUOTES, 'UTF-8'))
+            . '<br><br><a href="' . htmlspecialchars($inboxUrl, ENT_QUOTES, 'UTF-8') . '">In EasyTime öffnen</a>';
+        if ($actionAbsoluteUrl !== '') {
+            $body .= '<br><a href="' . htmlspecialchars($actionAbsoluteUrl, ENT_QUOTES, 'UTF-8') . '">Aufgabe öffnen</a>';
+        }
+        $mail->Body = $body;
+        $mail->AltBody = $title . "\n\n" . $message . "\n\n" . $inboxUrl;
 
         $mail->send();
     }
@@ -184,7 +156,7 @@ class MailService {
             ],
         ];
 
-        $mail->Timeout = (int) (getenv('MAIL_SMTP_TIMEOUT') ?: 15);
+        $mail->Timeout = (int) (getenv('MAIL_SMTP_TIMEOUT') ?: 10);
     }
 
     private static function configureTransport(PHPMailer $mail): void {
