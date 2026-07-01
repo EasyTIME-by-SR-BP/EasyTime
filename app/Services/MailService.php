@@ -15,6 +15,7 @@ class MailService {
      */
     public static function sendForNotification(int $userId, int $notificationId, array $payload): void {
         if (!self::shouldSend($payload)) {
+            error_log('[EasyTime Mail] Skipped notification #' . $notificationId . ': shouldSend=false');
             return;
         }
 
@@ -39,6 +40,128 @@ class MailService {
         } catch (\Throwable $e) {
             error_log('[EasyTime Mail] Failed for notification #' . $notificationId . ': ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Mail asynchron per Datei-Queue + CLI-Worker (blockiert den Request nicht).
+     *
+     * @param array<string, mixed> $payload
+     */
+    public static function dispatchForNotification(int $userId, int $notificationId, array $payload): void {
+        if (!self::shouldSend($payload)) {
+            error_log('[EasyTime Mail] Queue skip #' . $notificationId . ': shouldSend=false (MAIL_ENABLED or notify flags)');
+            return;
+        }
+
+        $user = User::getById($userId);
+        if (!$user) {
+            return;
+        }
+
+        $email = trim((string) ($user['email'] ?? ''));
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            error_log('[EasyTime Mail] Queue skip #' . $notificationId . ': invalid recipient email');
+            return;
+        }
+        if (str_ends_with(strtolower($email), '@demo.easytime.at')) {
+            error_log('[EasyTime Mail] Queue skip #' . $notificationId . ': demo address ' . $email);
+            return;
+        }
+
+        $job = [
+            'userId' => $userId,
+            'notificationId' => $notificationId,
+            'payload' => $payload,
+            'env' => self::mailEnvSnapshot(),
+        ];
+        $jobPath = sys_get_temp_dir() . '/easytime-mail-' . $notificationId . '-' . bin2hex(random_bytes(4)) . '.json';
+        if (@file_put_contents($jobPath, json_encode($job, JSON_UNESCAPED_UNICODE)) === false) {
+            error_log('[EasyTime Mail] Queue failed #' . $notificationId . ': could not write job file');
+            return;
+        }
+
+        if (!self::triggerBackgroundDispatch($jobPath)) {
+            error_log('[EasyTime Mail] Queue failed #' . $notificationId . ': could not start background worker');
+            return;
+        }
+
+        error_log('[EasyTime Mail] Queued notification #' . $notificationId . ' to ' . $email);
+    }
+
+    /** Hängengebliebene Jobs erneut anstoßen (z. B. nach SMTP-Timeout). */
+    public static function retryStaleJobs(int $maxJobs = 2, int $minAgeSeconds = 15): void {
+        $pattern = sys_get_temp_dir() . '/easytime-mail-*.json';
+        $files = glob($pattern) ?: [];
+        if ($files === []) {
+            return;
+        }
+        sort($files);
+        $cutoff = time() - $minAgeSeconds;
+        $retried = 0;
+        foreach ($files as $file) {
+            if ($retried >= $maxJobs) {
+                break;
+            }
+            if (@filemtime($file) > $cutoff) {
+                continue;
+            }
+            if (self::triggerBackgroundDispatch($file)) {
+                error_log('[EasyTime Mail] Retrying stale job: ' . basename($file));
+                $retried++;
+            }
+        }
+    }
+
+    private static function triggerBackgroundDispatch(string $jobPath): bool {
+        $script = dirname(__DIR__, 2) . '/scripts/dispatch-notification-mail.php';
+        if (!is_file($script)) {
+            error_log('[EasyTime Mail] Dispatch script missing: ' . $script);
+            return false;
+        }
+
+        if (!function_exists('exec')) {
+            error_log('[EasyTime Mail] exec() disabled — cannot start background worker');
+            return false;
+        }
+
+        $phpBin = (defined('PHP_BINARY') && PHP_BINARY !== '' && is_executable(PHP_BINARY))
+            ? PHP_BINARY
+            : 'php';
+        $logFile = sys_get_temp_dir() . '/easytime-mail-dispatch.log';
+        $cmd = sprintf(
+            'nohup %s %s %s >> %s 2>&1 < /dev/null &',
+            escapeshellarg($phpBin),
+            escapeshellarg($script),
+            escapeshellarg($jobPath),
+            escapeshellarg($logFile)
+        );
+
+        exec($cmd, $output, $exitCode);
+        if ($exitCode !== 0) {
+            error_log('[EasyTime Mail] Background exec failed exit=' . $exitCode);
+            return false;
+        }
+
+        return true;
+    }
+
+    /** @return array<string, string> */
+    private static function mailEnvSnapshot(): array {
+        $keys = [
+            'MAIL_ENABLED', 'MAIL_HOST', 'MAIL_PORT', 'MAIL_USERNAME', 'MAIL_PASSWORD',
+            'MAIL_FROM_ADDRESS', 'MAIL_FROM_NAME', 'MAIL_ENCRYPTION', 'MAIL_SMTP_AUTH',
+            'MAIL_AUTH_TYPE', 'MAIL_SMTP_INSECURE', 'MAIL_SMTP_AUTO_TLS', 'MAIL_SMTP_TIMEOUT',
+            'MAIL_NOTIFY_TASKS', 'MAIL_NOTIFY_INFO', 'APP_URL',
+            'DB_DRIVER', 'DB_HOST', 'DB_PORT', 'DB_DATABASE', 'DB_USERNAME', 'DB_PASSWORD',
+        ];
+        $env = [];
+        foreach ($keys as $key) {
+            $value = getenv($key);
+            if ($value !== false && $value !== '') {
+                $env[$key] = (string) $value;
+            }
+        }
+        return $env;
     }
 
     /**
@@ -70,6 +193,7 @@ class MailService {
         self::ensureAutoload();
 
         $mail = new PHPMailer(true);
+        $mail->CharSet = PHPMailer::CHARSET_UTF8;
         $mail->SMTPDebug = 0;
         self::applySmtpTransport($mail);
 
@@ -96,7 +220,34 @@ class MailService {
         $mail->Body = $body;
         $mail->AltBody = $title . "\n\n" . $message . "\n\n" . $inboxUrl;
 
-        $mail->send();
+        self::withSmtpLock(static function () use ($mail): void {
+            $mail->send();
+        });
+    }
+
+    private static function withSmtpLock(callable $send): void {
+        $lockPath = sys_get_temp_dir() . '/easytime-mail.smtp.lock';
+        $fp = @fopen($lockPath, 'c');
+        if ($fp === false) {
+            $send();
+            return;
+        }
+
+        $deadline = time() + 25;
+        while (!flock($fp, LOCK_EX | LOCK_NB)) {
+            if (time() >= $deadline) {
+                fclose($fp);
+                throw new \RuntimeException('SMTP lock timeout');
+            }
+            usleep(200_000);
+        }
+
+        try {
+            $send();
+        } finally {
+            flock($fp, LOCK_UN);
+            fclose($fp);
+        }
     }
 
     /** Testversand — gleiche SMTP-Einstellungen wie Produktion (siehe scripts/mailtest.php). */
@@ -156,7 +307,9 @@ class MailService {
             ],
         ];
 
-        $mail->Timeout = (int) (getenv('MAIL_SMTP_TIMEOUT') ?: 10);
+        $mail->Timeout = (int) (getenv('MAIL_SMTP_TIMEOUT') ?: 12);
+        ini_set('default_socket_timeout', (string) $mail->Timeout);
+        $mail->SMTPKeepAlive = false;
     }
 
     private static function configureTransport(PHPMailer $mail): void {

@@ -93,7 +93,7 @@ class Inbox {
                 'type' => $type,
                 'action_url' => $actionUrl,
             ];
-            MailService::sendForNotification($userId, $notificationId, $mailPayload);
+            MailService::dispatchForNotification($userId, $notificationId, $mailPayload);
         }
 
         return $threadId;

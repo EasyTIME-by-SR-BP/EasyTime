@@ -24,6 +24,17 @@ if (!is_array($job)) {
 $userId = (int) ($job['userId'] ?? 0);
 $notificationId = (int) ($job['notificationId'] ?? 0);
 $payload = is_array($job['payload'] ?? null) ? $job['payload'] : [];
+$jobEnv = is_array($job['env'] ?? null) ? $job['env'] : [];
+
+if ($jobEnv !== []) {
+    foreach ($jobEnv as $key => $value) {
+        if (!is_string($key) || !is_string($value)) {
+            continue;
+        }
+        putenv($key . '=' . $value);
+        $_ENV[$key] = $value;
+    }
+}
 
 if ($userId <= 0 || $notificationId <= 0 || $payload === []) {
     error_log('[EasyTime Mail] Dispatch invalid job payload for #' . $notificationId);
