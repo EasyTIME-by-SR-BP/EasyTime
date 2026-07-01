@@ -478,7 +478,7 @@ class User {
 
         self::clearResetToken($userId);
 
-        $token = bin2hex(random_bytes(32));
+        $token = bin2hex(random_bytes(16));
         $expiresAt = time() + 3600;
         \App\Core\Database::upsertAppSetting('pwd_reset_' . $token, $userId . ':' . $expiresAt);
         \App\Core\Database::upsertAppSetting('pwd_reset_user_' . $userId, $token);
@@ -488,7 +488,7 @@ class User {
 
     public static function verifyResetToken(string $token): int {
         $token = trim($token);
-        if ($token === '' || !preg_match('/^[a-f0-9]{64}$/', $token)) {
+        if ($token === '' || !preg_match('/^[a-f0-9]{32}$/', $token)) {
             return 0;
         }
 
